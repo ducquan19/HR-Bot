@@ -13,6 +13,8 @@ const CampaignsPage = React.lazy(() => import('@/pages/campaigns').then(m => ({ 
 const CandidatesPage = React.lazy(() => import('@/pages/candidates').then(m => ({ default: m.CandidatesPage })))
 const InterviewsPage = React.lazy(() => import('@/pages/interviews').then(m => ({ default: m.InterviewsPage })))
 const SettingsPage = React.lazy(() => import('@/pages/settings').then(m => ({ default: m.SettingsPage })))
+const PublicApplicationFormPage = React.lazy(() => import('@/pages/public/application-form').then(m => ({ default: m.PublicApplicationFormPage })))
+const PublicInterviewWorkspacePage = React.lazy(() => import('@/pages/public/interview-workspace').then(m => ({ default: m.PublicInterviewWorkspacePage })))
 
 // Other Pages
 const NotFoundPage = React.lazy(() => import('@/pages/not-found').then(m => ({ default: m.NotFoundPage })))
@@ -35,6 +37,8 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/apply/:token" element={<React.Suspense fallback={<FullPageLoader />}><PublicApplicationFormPage /></React.Suspense>} />
+      <Route path="/interview/:token" element={<React.Suspense fallback={<FullPageLoader />}><PublicInterviewWorkspacePage /></React.Suspense>} />
       
       <Route path="/dashboard" element={<ProtectedRoute element={<DashboardPage />} />} />
       <Route path="/campaigns" element={<ProtectedRoute element={<CampaignsPage />} />} />

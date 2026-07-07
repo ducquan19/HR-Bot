@@ -10,7 +10,7 @@ export class CampaignsService {
 
   async findAll() {
     const campaigns = await this.prisma.recruitmentCampaign.findMany({
-      include: { campaignPositions: { include: { position: true, applications: true } } },
+      include: { applicationForm: true, campaignPositions: { include: { position: true, applications: true } } },
       orderBy: { createdAt: 'desc' },
     });
     return campaigns.map((c) => this.toFrontendCampaign(c));
@@ -81,7 +81,7 @@ export class CampaignsService {
             create: { publicToken: uuid(), isPublic: true },
           },
         },
-        include: { campaignPositions: { include: { position: true, applications: true } } },
+        include: { applicationForm: true, campaignPositions: { include: { position: true, applications: true } } },
       });
     });
     return this.toFrontendCampaign(campaign);
@@ -93,7 +93,7 @@ export class CampaignsService {
     const campaign = await this.prisma.recruitmentCampaign.update({
       where: { id },
       data,
-      include: { campaignPositions: { include: { position: true, applications: true } } },
+      include: { applicationForm: true, campaignPositions: { include: { position: true, applications: true } } },
     });
     return this.toFrontendCampaign(campaign);
   }
@@ -121,6 +121,49 @@ export class CampaignsService {
     });
   }
 
+  async findPublicApplicationForm(publicToken: string) {
+    const form = await this.prisma.applicationForm.findUnique({
+      where: { publicToken },
+      include: {
+        campaign: {
+          include: {
+            campaignPositions: {
+              where: { status: 'OPEN' },
+              include: { position: { include: { jobDescription: true, positionSkills: { include: { skill: true } } } } },
+            },
+          },
+        },
+      },
+    });
+    if (!form || !form.isPublic || form.campaign.status !== 'ACTIVE' || form.campaign.deadline < new Date()) {
+      throw new NotFoundException('Application form is not available');
+    }
+
+    return {
+      id: form.id,
+      publicToken: form.publicToken,
+      enabledFields: form.enabledFields,
+      campaign: {
+        id: form.campaign.id,
+        title: form.campaign.title,
+        description: form.campaign.description,
+        department: form.campaign.department,
+        deadline: form.campaign.deadline.toISOString(),
+      },
+      positions: form.campaign.campaignPositions.map((campaignPosition) => ({
+        id: campaignPosition.id,
+        vacancies: campaignPosition.vacancies,
+        title: campaignPosition.position.title,
+        department: campaignPosition.position.department,
+        seniority: campaignPosition.position.seniority,
+        employmentType: campaignPosition.position.employmentType,
+        overview: campaignPosition.position.jobDescription?.overview,
+        requirements: campaignPosition.position.jobDescription?.requirements,
+        skills: campaignPosition.position.positionSkills.map((positionSkill) => positionSkill.skill.name),
+      })),
+    };
+  }
+
   private toFrontendCampaign(campaign: any) {
     const firstPosition = campaign.campaignPositions?.[0]?.position;
     return {
@@ -134,6 +177,8 @@ export class CampaignsService {
       createdAt: campaign.createdAt.toISOString(),
       updatedAt: campaign.updatedAt.toISOString(),
       candidateCount: campaign.campaignPositions?.reduce((sum: number, cp: any) => sum + (cp.applications?.length ?? 0), 0) ?? 0,
+      publicApplicationToken: campaign.applicationForm?.publicToken,
+      publicApplicationUrl: campaign.applicationForm?.publicToken ? `/apply/${campaign.applicationForm.publicToken}` : undefined,
     };
   }
 }

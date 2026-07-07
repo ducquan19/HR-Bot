@@ -21,6 +21,8 @@ export interface RecruitmentCampaign {
   createdBy: string
   createdAt: string
   updatedAt: string
+  publicApplicationToken?: string
+  publicApplicationUrl?: string
 }
 
 // Job Position Types
@@ -79,6 +81,54 @@ export interface VirtualInterview {
   campaignId?: string
   createdBy: string
   createdAt: string
+}
+
+export interface PublicApplicationForm {
+  id: string
+  publicToken: string
+  enabledFields: Record<string, boolean>
+  campaign: {
+    id: string
+    title: string
+    description?: string
+    department?: string
+    deadline: string
+  }
+  positions: Array<{
+    id: string
+    vacancies: number
+    title: string
+    department?: string
+    seniority?: string
+    employmentType: string
+    overview?: string
+    requirements?: string
+    skills: string[]
+  }>
+}
+
+export interface PublicInterviewQuestion {
+  id: string
+  order: number
+  category?: string
+  question: string
+}
+
+export interface PublicInterviewSession {
+  id: string
+  publicToken: string
+  meetingUrl: string
+  status: 'pending' | 'sent' | 'in_progress' | 'completed' | 'expired' | 'cancelled'
+  scheduledAt?: string
+  expiresAt: string
+  application: {
+    candidateProfile: {
+      firstName: string
+      lastName: string
+      email: string
+    }
+  }
+  questions: PublicInterviewQuestion[]
 }
 
 // Filter Types

@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '@/constants'
-import type { ApiResponse, Candidate, CandidateFilters, RecruitmentCampaign, User, VirtualInterview } from '@/types'
+import type { ApiResponse, Candidate, CandidateFilters, PublicApplicationForm, PublicInterviewSession, RecruitmentCampaign, User, VirtualInterview } from '@/types'
 
 function toBackendEnum(value?: string) {
   return value?.toUpperCase()
@@ -74,14 +74,21 @@ export const api = {
     upload: (formData: FormData) => request<Candidate>('/candidates/upload', { method: 'POST', body: formData }),
     updateStage: (id: string, stage: string) => request<Candidate>(`/candidates/${id}/stage`, { method: 'PATCH', body: JSON.stringify({ stage: toBackendEnum(stage) }) }),
     score: (candidateIds?: string[], campaignId?: string) => request('/candidates/score', { method: 'POST', body: JSON.stringify({ candidateIds, campaignId }) }),
+    publicUpload: (formData: FormData) => request<Candidate>('/candidates/public/upload', { method: 'POST', body: formData }),
   },
   interviews: {
     list: () => request<VirtualInterview[]>('/interviews'),
     create: (payload: unknown) => request<VirtualInterview>('/interviews', { method: 'POST', body: JSON.stringify(payload) }),
     sendInvite: (id: string) => request(`/interviews/${id}/send-invite`, { method: 'POST' }),
     updateStatus: (id: string, status: string) => request(`/interviews/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: toBackendEnum(status) }) }),
+    publicFind: (token: string) => request<PublicInterviewSession>(`/interviews/public/${token}`),
+    publicSubmit: (token: string, answers: Array<{ questionId: string; answer: string; duration?: number }>) =>
+      request(`/interviews/public/${token}/submit`, { method: 'POST', body: JSON.stringify({ answers }) }),
   },
   dashboard: {
     summary: () => request('/dashboard/summary'),
+  },
+  applicationForms: {
+    publicFind: (token: string) => request<PublicApplicationForm>(`/application-forms/public/${token}`),
   },
 }

@@ -8,7 +8,7 @@ import { Alert } from '@/components/ui/alert'
 import { useCampaignsStore } from '@/stores/campaigns-store'
 import { useCandidatesStore } from '@/stores/candidates-store'
 import { formatDate } from '@/lib/utils'
-import { Plus, Archive, Trash2, Eye, Calendar, Users, TrendingUp } from 'lucide-react'
+import { Plus, Archive, Trash2, Eye, Calendar, Users, TrendingUp, Copy, ExternalLink } from 'lucide-react'
 
 export function CampaignsPage() {
   const { campaigns, isLoading, loadCampaigns, createCampaign, updateCampaign, deleteCampaign } = useCampaignsStore()
@@ -81,6 +81,9 @@ export function CampaignsPage() {
   const activeCampaigns = campaigns.filter((campaign) => campaign.status === 'active')
   const archivedCampaigns = campaigns.filter((campaign) => campaign.status !== 'active')
   const selectedCampaignDetail = campaigns.find((campaign) => campaign.id === selectedCampaign)
+  const publicApplicationLink = selectedCampaignDetail?.publicApplicationUrl
+    ? `${window.location.origin}${selectedCampaignDetail.publicApplicationUrl}`
+    : ''
 
   return (
     <div className="p-8">
@@ -279,10 +282,24 @@ export function CampaignsPage() {
         title={selectedCampaignDetail?.name || 'Campaign'}
       >
         {selectedCampaignDetail && (
-          <div className="space-y-3 text-sm">
+          <div className="space-y-4 text-sm">
             <div><span className="text-muted-foreground">Status:</span> {selectedCampaignDetail.status}</div>
             <div><span className="text-muted-foreground">Deadline:</span> {formatDate(selectedCampaignDetail.endDate)}</div>
             <div><span className="text-muted-foreground">Candidates:</span> {getCandidateCount(selectedCampaignDetail.id)}</div>
+            {publicApplicationLink && (
+              <div>
+                <p className="text-muted-foreground mb-2">Public application link</p>
+                <div className="flex gap-2">
+                  <Input readOnly value={publicApplicationLink} />
+                  <Button variant="outline" onClick={() => navigator.clipboard.writeText(publicApplicationLink)} title="Copy link">
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                  <Button variant="outline" onClick={() => window.open(publicApplicationLink, '_blank')} title="Open link">
+                    <ExternalLink className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Modal>
