@@ -9,8 +9,10 @@ import { Alert } from '@/components/ui/alert'
 import { useCandidatesStore } from '@/stores/candidates-store'
 import { useCampaignsStore } from '@/stores/campaigns-store'
 import { CANDIDATE_STAGES, CANDIDATE_STAGE_COLORS, COMMON_SKILLS } from '@/constants'
+import { api } from '@/lib/api'
 import { formatDate, getInitials } from '@/lib/utils'
 import { Filter, Search, Upload, Zap, Eye, Phone, Mail } from 'lucide-react'
+import type { Candidate } from '@/types'
 
 export function CandidatesPage() {
   const {
@@ -32,6 +34,8 @@ export function CandidatesPage() {
   const [selectedSkill, setSelectedSkill] = useState('')
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null)
+  const [detailCandidate, setDetailCandidate] = useState<Candidate | null>(null)
+  const [isDetailLoading, setIsDetailLoading] = useState(false)
   const [showScoreModal, setShowScoreModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showMoreFilters, setShowMoreFilters] = useState(false)
@@ -118,7 +122,36 @@ export function CandidatesPage() {
     setFilters({})
   }
 
-  const selectedDetail = candidates.find((candidate) => candidate.id === selectedCandidate)
+  const openCandidateDetail = async (candidateId: string) => {
+    setSelectedCandidate(candidateId)
+    setDetailCandidate(null)
+    setShowDetailModal(true)
+    setIsDetailLoading(true)
+    try {
+      const candidate = await api.candidates.get(candidateId)
+      setDetailCandidate(candidate)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load candidate details')
+    } finally {
+      setIsDetailLoading(false)
+    }
+  }
+
+  const selectedDetail = detailCandidate ?? candidates.find((candidate) => candidate.id === selectedCandidate)
+  const extractedInfo = selectedDetail?.extractedInfo ?? {}
+  const extractedSummary = typeof extractedInfo.summary === 'string' ? extractedInfo.summary : ''
+  const extractedProjects = Array.isArray(extractedInfo.projects) ? extractedInfo.projects : []
+  const aiScore = selectedDetail?.screeningResult?.overallScore ?? (selectedDetail?.score !== undefined ? selectedDetail.score * 100 : undefined)
+  const renderDetailList = (items?: string[]) => (
+    items?.length ? (
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => <Badge key={item} variant="secondary">{item}</Badge>)}
+      </div>
+    ) : (
+      <p className="text-sm text-muted-foreground">No data yet</p>
+    )
+  )
 
   return (
     <div className="p-8">
@@ -267,10 +300,7 @@ export function CandidatesPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          setSelectedCandidate(candidate.id)
-                          setShowDetailModal(true)
-                        }}
+                        onClick={() => openCandidateDetail(candidate.id)}
                         className="gap-1"
                       >
                         <Eye className="w-4 h-4" />
@@ -291,11 +321,39 @@ export function CandidatesPage() {
 
       <Modal
         isOpen={showDetailModal}
-        onClose={() => setShowDetailModal(false)}
+        onClose={() => {
+          setShowDetailModal(false)
+          setDetailCandidate(null)
+        }}
         title={selectedDetail ? `${selectedDetail.firstName} ${selectedDetail.lastName}` : 'Candidate Details'}
+        className="max-w-4xl max-h-[90vh] overflow-y-auto"
       >
-        {selectedDetail && (
+        {isDetailLoading && (
+          <p className="text-sm text-muted-foreground">Loading candidate details...</p>
+        )}
+        {!isDetailLoading && selectedDetail && (
           <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div className="rounded-md border border-border p-3">
+                <p className="text-xs text-muted-foreground">AI Score</p>
+                <p className="text-xl font-semibold">{aiScore !== undefined ? `${Math.round(aiScore)}%` : 'N/A'}</p>
+              </div>
+              <div className="rounded-md border border-border p-3">
+                <p className="text-xs text-muted-foreground">Stage</p>
+                <Badge className={CANDIDATE_STAGE_COLORS[selectedDetail.stage]}>{CANDIDATE_STAGES[selectedDetail.stage]}</Badge>
+              </div>
+              <div className="rounded-md border border-border p-3">
+                <p className="text-xs text-muted-foreground">Recommendation</p>
+                <p className="text-sm font-medium capitalize">
+                  {selectedDetail.screeningResult?.recommendation.replace(/_/g, ' ') || 'Not scored'}
+                </p>
+              </div>
+              <div className="rounded-md border border-border p-3">
+                <p className="text-xs text-muted-foreground">Applied</p>
+                <p className="text-sm font-medium">{formatDate(selectedDetail.appliedAt)}</p>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Email</p>
@@ -320,22 +378,63 @@ export function CandidatesPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground mb-2">Skills</p>
-              <div className="flex flex-wrap gap-2">
-                {selectedDetail.skills.map((skill) => <Badge key={skill}>{skill}</Badge>)}
-              </div>
+              {renderDetailList(selectedDetail.skills)}
             </div>
             <div>
               <p className="text-sm text-muted-foreground mb-2">Education</p>
-              <div className="flex flex-wrap gap-2">
-                {selectedDetail.education.map((education) => (
-                  <Badge key={education} variant="secondary">{education}</Badge>
-                ))}
+              {renderDetailList(selectedDetail.education)}
+            </div>
+            {(extractedSummary || extractedProjects.length > 0) && (
+              <div className="rounded-md border border-border p-4">
+                <p className="text-sm font-medium mb-2">Extracted CV Profile</p>
+                {extractedSummary && <p className="text-sm text-muted-foreground mb-3">{extractedSummary}</p>}
+                {extractedProjects.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase text-muted-foreground">Projects</p>
+                    {extractedProjects.slice(0, 3).map((project: any, index: number) => (
+                      <div key={`${project.name ?? 'project'}-${index}`} className="rounded-md bg-muted p-3">
+                        <p className="text-sm font-medium">{project.name ?? `Project ${index + 1}`}</p>
+                        {project.description && <p className="text-sm text-muted-foreground">{project.description}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-2">Applied</p>
-              <p className="text-sm">{formatDate(selectedDetail.appliedAt)}</p>
-            </div>
+            )}
+            {selectedDetail.screeningResult && (
+              <div className="rounded-md border border-border p-4">
+                <p className="text-sm font-medium mb-3">AI Screening Report</p>
+                <div className="grid gap-3 sm:grid-cols-3 mb-4">
+                  {[
+                    ['Skills', selectedDetail.screeningResult.skillScore],
+                    ['Education', selectedDetail.screeningResult.educationScore],
+                    ['Experience', selectedDetail.screeningResult.experienceScore],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-md bg-muted p-3">
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                      <p className="text-lg font-semibold">{Math.round(Number(value))}%</p>
+                    </div>
+                  ))}
+                </div>
+                {selectedDetail.screeningResult.explanation && (
+                  <p className="text-sm text-muted-foreground mb-4">{selectedDetail.screeningResult.explanation}</p>
+                )}
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground mb-2">Strengths</p>
+                    {renderDetailList(selectedDetail.screeningResult.strengths)}
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground mb-2">Weaknesses</p>
+                    {renderDetailList(selectedDetail.screeningResult.weaknesses)}
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground mb-2">Missing Skills</p>
+                    {renderDetailList(selectedDetail.screeningResult.missingSkills)}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Modal>

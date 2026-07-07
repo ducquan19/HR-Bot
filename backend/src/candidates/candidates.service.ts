@@ -162,6 +162,7 @@ export class CandidatesService {
     return {
       skills: { include: { skill: true } },
       education: true,
+      experiences: true,
       cvs: { orderBy: { createdAt: 'desc' as const }, take: 1, include: { aiExtractions: { orderBy: { createdAt: 'desc' as const }, take: 1 } } },
       applications: { orderBy: { appliedAt: 'desc' as const }, include: { screeningResult: true, campaignPosition: true } },
     };
@@ -186,9 +187,24 @@ export class CandidatesService {
       gpa: profile.education?.find((e: any) => e.gpa)?.gpa,
       experience: profile.experiences?.reduce((sum: number, e: any) => sum + (e.years ?? 0), 0) ?? (extraction?.parsedJson as any)?.experienceYears ?? 0,
       campaignId: app?.campaignPosition?.campaignId,
+      applicationId: app?.id,
       appliedAt: app?.appliedAt?.toISOString() ?? profile.createdAt.toISOString(),
       updatedAt: profile.updatedAt.toISOString(),
       extractedInfo: detailed ? extraction?.parsedJson : undefined,
+      screeningResult: app?.screeningResult
+        ? {
+            overallScore: app.screeningResult.overallScore,
+            skillScore: app.screeningResult.skillScore,
+            educationScore: app.screeningResult.educationScore,
+            experienceScore: app.screeningResult.experienceScore,
+            recommendation: app.screeningResult.recommendation.toLowerCase(),
+            strengths: app.screeningResult.strengths ?? [],
+            weaknesses: app.screeningResult.weaknesses ?? [],
+            missingSkills: app.screeningResult.missingSkills ?? [],
+            explanation: app.screeningResult.explanation,
+            updatedAt: app.screeningResult.updatedAt?.toISOString(),
+          }
+        : undefined,
     };
   }
 }

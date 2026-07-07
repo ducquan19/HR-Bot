@@ -60,6 +60,7 @@ export interface Candidate {
   gpa?: number
   experience: number // years
   campaignId?: string
+  applicationId?: string
   appliedAt: string
   updatedAt: string
   extractedInfo?: {
@@ -67,6 +68,18 @@ export interface Candidate {
     skills?: string[]
     experience?: string
     [key: string]: any
+  }
+  screeningResult?: {
+    overallScore: number
+    skillScore: number
+    educationScore: number
+    experienceScore: number
+    recommendation: 'strong_recommend' | 'recommend' | 'consider' | 'reject'
+    strengths: string[]
+    weaknesses: string[]
+    missingSkills: string[]
+    explanation?: string
+    updatedAt?: string
   }
 }
 

@@ -71,6 +71,7 @@ export const api = {
       if (filters.scoreMax !== undefined) params.set('scoreMax', String(filters.scoreMax))
       return request<Candidate[]>(`/candidates?${params}`)
     },
+    get: (id: string) => request<Candidate>(`/candidates/${id}`),
     upload: (formData: FormData) => request<Candidate>('/candidates/upload', { method: 'POST', body: formData }),
     updateStage: (id: string, stage: string) => request<Candidate>(`/candidates/${id}/stage`, { method: 'PATCH', body: JSON.stringify({ stage: toBackendEnum(stage) }) }),
     score: (candidateIds?: string[], campaignId?: string) => request('/candidates/score', { method: 'POST', body: JSON.stringify({ candidateIds, campaignId }) }),
