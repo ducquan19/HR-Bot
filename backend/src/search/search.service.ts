@@ -7,11 +7,12 @@ export class SearchService {
   constructor(private readonly prisma: PrismaService, private readonly ai: AiService) {}
 
   async semanticCandidates(query: string, limit = 20) {
+    if (!query?.trim()) return [];
     const embedding = await this.ai.embed(query);
     const vectorLiteral = `[${embedding.join(',')}]`;
     try {
       return await this.prisma.$queryRawUnsafe(
-        `SELECT cp.id, cp.first_name, cp.last_name, cp.email, 1 - (ce.embedding <=> $1::vector) AS similarity
+        `SELECT cp.id, cp.first_name AS "firstName", cp.last_name AS "lastName", cp.email, 1 - (ce.embedding <=> $1::vector) AS similarity
          FROM candidate_embeddings ce
          JOIN candidate_profiles cp ON cp.id = ce.candidate_profile_id
          ORDER BY ce.embedding <=> $1::vector
@@ -20,7 +21,7 @@ export class SearchService {
         limit,
       );
     } catch {
-      return this.prisma.candidateProfile.findMany({
+      const candidates = await this.prisma.candidateProfile.findMany({
         where: {
           OR: [
             { firstName: { contains: query, mode: 'insensitive' } },
@@ -30,6 +31,13 @@ export class SearchService {
         },
         take: limit,
       });
+      return candidates.map((candidate) => ({
+        id: candidate.id,
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        email: candidate.email,
+        similarity: null,
+      }));
     }
   }
 }

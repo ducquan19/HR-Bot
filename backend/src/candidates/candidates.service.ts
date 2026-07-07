@@ -8,6 +8,7 @@ import { StorageService } from '../files/storage.service';
 import { CV_QUEUE } from '../queue/queue.module';
 import { AiService } from '../ai/ai.service';
 import { CandidateQueryDto, ScoreCandidatesDto, UploadCandidateDto } from './dto/candidate.dto';
+import { buildCandidateReportPdf, pdfHeading, pdfSection, pdfWrapped } from './candidate-report-pdf';
 
 @Injectable()
 export class CandidatesService {
@@ -131,6 +132,85 @@ export class CandidatesService {
     return { url: await this.storage.getSignedDownloadUrl(cv.storagePath) };
   }
 
+  async generateReportPdf(candidateId: string) {
+    const profile = await this.prisma.candidateProfile.findUnique({
+      where: { id: candidateId },
+      include: {
+        skills: { include: { skill: true } },
+        education: true,
+        experiences: true,
+        cvs: { orderBy: { createdAt: 'desc' }, take: 1, include: { aiExtractions: { orderBy: { createdAt: 'desc' }, take: 1 } } },
+        applications: {
+          orderBy: { appliedAt: 'desc' },
+          include: {
+            screeningResult: true,
+            campaignPosition: { include: { campaign: true, position: { include: { jobDescription: true } } } },
+            interviewSessions: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              include: { questions: { orderBy: { order: 'asc' }, include: { answer: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (!profile) throw new NotFoundException('Candidate not found');
+
+    const app = profile.applications[0];
+    const screening = app?.screeningResult;
+    const extraction = profile.cvs[0]?.aiExtractions[0];
+    const parsed = extraction?.parsedJson as any;
+    const interview = app?.interviewSessions[0];
+    const skills = profile.skills.map((item) => item.skill.name);
+    const education = profile.education.map((item) => [item.degree, item.school].filter(Boolean).join(' - '));
+    const experiences = profile.experiences.map((item) => [item.title, item.company, item.years ? `${item.years} years` : undefined].filter(Boolean).join(' - '));
+    const name = `${profile.firstName} ${profile.lastName}`;
+
+    const lines = [
+      pdfHeading('HR Bot Candidate Evaluation Report'),
+      ...pdfWrapped(`Candidate: ${name}`),
+      ...pdfWrapped(`Email: ${profile.email}`),
+      ...pdfWrapped(`Phone: ${profile.phone ?? 'N/A'}`),
+      ...pdfWrapped(`Generated at: ${new Date().toISOString()}`),
+      pdfSection('Application'),
+      ...pdfWrapped(`Campaign: ${app?.campaignPosition.campaign.title ?? 'N/A'}`),
+      ...pdfWrapped(`Position: ${app?.campaignPosition.position.title ?? 'N/A'}`),
+      ...pdfWrapped(`Stage: ${app?.currentStage ?? 'N/A'}`),
+      ...pdfWrapped(`Applied at: ${app?.appliedAt?.toISOString() ?? 'N/A'}`),
+      pdfSection('Profile Summary'),
+      ...pdfWrapped(parsed?.summary ?? extraction?.summary ?? 'No CV summary has been extracted yet.'),
+      pdfSection('Skills'),
+      ...pdfWrapped(skills.length ? skills.join(', ') : 'No skills recorded.'),
+      pdfSection('Education'),
+      ...pdfWrapped(education.length ? education.join('; ') : 'No education recorded.'),
+      pdfSection('Experience'),
+      ...pdfWrapped(experiences.length ? experiences.join('; ') : `${parsed?.experienceYears ?? 0} years from CV extraction.`),
+      pdfSection('AI Screening'),
+      ...pdfWrapped(`Overall score: ${screening ? Math.round(screening.overallScore) : 'N/A'}%`),
+      ...pdfWrapped(`Skill score: ${screening ? Math.round(screening.skillScore) : 'N/A'}%`),
+      ...pdfWrapped(`Education score: ${screening ? Math.round(screening.educationScore) : 'N/A'}%`),
+      ...pdfWrapped(`Experience score: ${screening ? Math.round(screening.experienceScore) : 'N/A'}%`),
+      ...pdfWrapped(`Recommendation: ${screening?.recommendation ?? 'N/A'}`),
+      ...pdfWrapped(screening?.explanation ?? 'No AI screening explanation has been generated yet.'),
+      ...pdfWrapped(screening?.strengths?.length ? screening.strengths.join('; ') : 'No strengths recorded.', 'Strengths: '),
+      ...pdfWrapped(screening?.weaknesses?.length ? screening.weaknesses.join('; ') : 'No weaknesses recorded.', 'Weaknesses: '),
+      ...pdfWrapped(screening?.missingSkills?.length ? screening.missingSkills.join(', ') : 'No missing skills recorded.', 'Missing skills: '),
+      pdfSection('Latest Virtual Interview'),
+      ...pdfWrapped(`Status: ${interview?.status ?? 'N/A'}`),
+      ...pdfWrapped(`Scheduled at: ${interview?.scheduledAt?.toISOString() ?? 'N/A'}`),
+      ...pdfWrapped(
+        interview?.questions?.length
+          ? interview.questions.map((question: any) => `Q${question.order}: ${question.question} Answer: ${question.answer?.answer ?? 'No answer'}`).join(' | ')
+          : 'No virtual interview answers recorded.',
+      ),
+    ];
+
+    return {
+      filename: `${this.slugify(name)}-evaluation-report.pdf`,
+      buffer: buildCandidateReportPdf(lines),
+    };
+  }
+
   private async upsertCandidate(dto: UploadCandidateDto) {
     const existing = await this.prisma.candidateProfile.findFirst({ where: { email: dto.email.toLowerCase() } });
     if (existing) {
@@ -156,6 +236,15 @@ export class CandidatesService {
     if (!dto.campaignId) return undefined;
     const cp = await this.prisma.campaignPosition.findFirst({ where: { campaignId: dto.campaignId, status: 'OPEN' } });
     return cp?.id;
+  }
+
+  private slugify(value: string) {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || 'candidate';
   }
 
   private includeCandidate() {

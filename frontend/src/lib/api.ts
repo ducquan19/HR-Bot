@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '@/constants'
-import type { ApiResponse, Candidate, CandidateFilters, PublicApplicationForm, PublicInterviewSession, RecruitmentCampaign, User, VirtualInterview } from '@/types'
+import type { ApiResponse, Candidate, CandidateFilters, PublicApplicationForm, PublicInterviewSession, RecruitmentCampaign, SemanticCandidateResult, User, VirtualInterview } from '@/types'
 
 function toBackendEnum(value?: string) {
   return value?.toUpperCase()
@@ -22,6 +22,25 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new Error(payload.error || `Request failed with status ${response.status}`)
   }
   return (payload.data ?? payload) as T
+}
+
+async function download(path: string, filename: string) {
+  const token = localStorage.getItem('hrbot_access_token')
+  const headers = new Headers()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  const response = await fetch(`${API_BASE_URL}${path}`, { headers, credentials: 'include' })
+  if (!response.ok) throw new Error(`Download failed with status ${response.status}`)
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
 
 export const api = {
@@ -72,6 +91,7 @@ export const api = {
       return request<Candidate[]>(`/candidates?${params}`)
     },
     get: (id: string) => request<Candidate>(`/candidates/${id}`),
+    downloadReport: (id: string, filename = 'candidate-evaluation-report.pdf') => download(`/candidates/${id}/report.pdf`, filename),
     upload: (formData: FormData) => request<Candidate>('/candidates/upload', { method: 'POST', body: formData }),
     updateStage: (id: string, stage: string) => request<Candidate>(`/candidates/${id}/stage`, { method: 'PATCH', body: JSON.stringify({ stage: toBackendEnum(stage) }) }),
     score: (candidateIds?: string[], campaignId?: string) => request('/candidates/score', { method: 'POST', body: JSON.stringify({ candidateIds, campaignId }) }),
@@ -88,6 +108,9 @@ export const api = {
   },
   dashboard: {
     summary: () => request('/dashboard/summary'),
+  },
+  search: {
+    candidates: (query: string, limit = 20) => request<SemanticCandidateResult[]>(`/search/candidates?q=${encodeURIComponent(query)}&limit=${limit}`),
   },
   applicationForms: {
     publicFind: (token: string) => request<PublicApplicationForm>(`/application-forms/public/${token}`),

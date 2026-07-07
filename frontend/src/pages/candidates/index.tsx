@@ -11,8 +11,8 @@ import { useCampaignsStore } from '@/stores/campaigns-store'
 import { CANDIDATE_STAGES, CANDIDATE_STAGE_COLORS, COMMON_SKILLS } from '@/constants'
 import { api } from '@/lib/api'
 import { formatDate, getInitials } from '@/lib/utils'
-import { Filter, Search, Upload, Zap, Eye, Phone, Mail } from 'lucide-react'
-import type { Candidate } from '@/types'
+import { Download, Filter, Search, Upload, Zap, Eye, Phone, Mail } from 'lucide-react'
+import type { Candidate, SemanticCandidateResult } from '@/types'
 
 export function CandidatesPage() {
   const {
@@ -30,12 +30,16 @@ export function CandidatesPage() {
   const { campaigns, loadCampaigns } = useCampaignsStore()
 
   const [searchTerm, setSearchTerm] = useState('')
+  const [semanticQuery, setSemanticQuery] = useState('')
+  const [semanticResults, setSemanticResults] = useState<SemanticCandidateResult[] | null>(null)
+  const [isSemanticSearching, setIsSemanticSearching] = useState(false)
   const [selectedStage, setSelectedStage] = useState('')
   const [selectedSkill, setSelectedSkill] = useState('')
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null)
   const [detailCandidate, setDetailCandidate] = useState<Candidate | null>(null)
   const [isDetailLoading, setIsDetailLoading] = useState(false)
+  const [isReportDownloading, setIsReportDownloading] = useState(false)
   const [showScoreModal, setShowScoreModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showMoreFilters, setShowMoreFilters] = useState(false)
@@ -55,7 +59,7 @@ export function CandidatesPage() {
   }, [loadCandidates, loadCampaigns])
 
   const filteredCandidates = useMemo(() => {
-    return getFilteredCandidates().filter((candidate) => {
+    const base = getFilteredCandidates().filter((candidate) => {
       const search = searchTerm.toLowerCase()
       if (
         search &&
@@ -69,7 +73,18 @@ export function CandidatesPage() {
       if (selectedSkill && !candidate.skills.some((skill) => skill.toLowerCase().includes(selectedSkill.toLowerCase()))) return false
       return true
     })
-  }, [getFilteredCandidates, searchTerm, selectedStage, selectedSkill])
+    if (!semanticResults) return base
+
+    const resultIds = new Set(semanticResults.map((result) => result.id))
+    const order = new Map(semanticResults.map((result, index) => [result.id, index]))
+    return base
+      .filter((candidate) => resultIds.has(candidate.id))
+      .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+  }, [getFilteredCandidates, searchTerm, selectedStage, selectedSkill, semanticResults])
+
+  const semanticById = useMemo(() => {
+    return new Map((semanticResults ?? []).map((result) => [result.id, result]))
+  }, [semanticResults])
 
   const handleMoveStage = async (candidateId: string, newStage: string) => {
     try {
@@ -117,9 +132,30 @@ export function CandidatesPage() {
 
   const handleClearFilters = () => {
     setSearchTerm('')
+    setSemanticQuery('')
+    setSemanticResults(null)
     setSelectedStage('')
     setSelectedSkill('')
     setFilters({})
+  }
+
+  const handleSemanticSearch = async () => {
+    const query = semanticQuery.trim()
+    if (!query) {
+      setSemanticResults(null)
+      return
+    }
+
+    setIsSemanticSearching(true)
+    try {
+      const results = await api.search.candidates(query, 30)
+      setSemanticResults(results)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not search candidates')
+    } finally {
+      setIsSemanticSearching(false)
+    }
   }
 
   const openCandidateDetail = async (candidateId: string) => {
@@ -135,6 +171,20 @@ export function CandidatesPage() {
       setError(err instanceof Error ? err.message : 'Could not load candidate details')
     } finally {
       setIsDetailLoading(false)
+    }
+  }
+
+  const handleDownloadReport = async () => {
+    if (!selectedDetail) return
+    setIsReportDownloading(true)
+    try {
+      const name = `${selectedDetail.firstName}-${selectedDetail.lastName}`.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      await api.candidates.downloadReport(selectedDetail.id, `${name || 'candidate'}-evaluation-report.pdf`)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not download candidate report')
+    } finally {
+      setIsReportDownloading(false)
     }
   }
 
@@ -212,9 +262,45 @@ export function CandidatesPage() {
             </Button>
           </div>
           {showMoreFilters && (
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 space-y-4">
+              <div className="flex flex-col gap-2 md:flex-row">
+                <Input
+                  placeholder="Semantic search, e.g. React intern with PostgreSQL experience"
+                  value={semanticQuery}
+                  onChange={(event) => setSemanticQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') handleSemanticSearch()
+                  }}
+                />
+                <Button variant="outline" onClick={handleSemanticSearch} isLoading={isSemanticSearching} className="gap-2 md:w-44">
+                  <Search className="w-4 h-4" />
+                  Semantic Search
+                </Button>
+              </div>
+              {semanticResults && (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    Ranked {semanticResults.length} candidates by semantic match
+                  </p>
+                  <Button variant="ghost" onClick={() => setSemanticResults(null)}>
+                    Clear Semantic
+                  </Button>
+                </div>
+              )}
+              <div className="flex justify-end">
+                <Button variant="ghost" onClick={handleClearFilters}>
+                  Clear Filters
+                </Button>
+              </div>
+            </div>
+          )}
+          {!showMoreFilters && semanticResults && (
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                Semantic ranking active for "{semanticQuery}"
+              </p>
               <Button variant="ghost" onClick={handleClearFilters}>
-                Clear Filters
+                Clear Search
               </Button>
             </div>
           )}
@@ -225,6 +311,7 @@ export function CandidatesPage() {
         <p className="text-sm text-muted-foreground">
           Showing {filteredCandidates.length} of {candidates.length} candidates
           {selectedCandidates.length > 0 && ` • ${selectedCandidates.length} selected`}
+          {semanticResults && ` • semantic ranked`}
         </p>
       </div>
 
@@ -263,6 +350,13 @@ export function CandidatesPage() {
                       <Badge className={CANDIDATE_STAGE_COLORS[candidate.stage]}>
                         {CANDIDATE_STAGES[candidate.stage]}
                       </Badge>
+                      {semanticResults && (
+                        <Badge variant="secondary">
+                          {semanticById.get(candidate.id)?.similarity != null
+                            ? `${Math.round((semanticById.get(candidate.id)?.similarity ?? 0) * 100)}% match`
+                            : 'keyword match'}
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <a href={`mailto:${candidate.email}`} className="flex items-center gap-1 hover:text-foreground">
@@ -333,6 +427,12 @@ export function CandidatesPage() {
         )}
         {!isDetailLoading && selectedDetail && (
           <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={handleDownloadReport} isLoading={isReportDownloading} className="gap-2">
+                <Download className="w-4 h-4" />
+                Export PDF
+              </Button>
+            </div>
             <div className="grid gap-3 sm:grid-cols-4">
               <div className="rounded-md border border-border p-3">
                 <p className="text-xs text-muted-foreground">AI Score</p>

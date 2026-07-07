@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CandidatesService } from './candidates.service';
@@ -13,6 +14,16 @@ export class CandidatesController {
   @Get()
   findAll(@Query() query: CandidateQueryDto) {
     return this.candidates.findAll(query);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/report.pdf')
+  async downloadReport(@Param('id') id: string, @Res() res: Response) {
+    const report = await this.candidates.generateReportPdf(id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${report.filename}"`);
+    res.setHeader('Content-Length', report.buffer.length);
+    res.send(report.buffer);
   }
 
   @UseGuards(JwtAuthGuard)

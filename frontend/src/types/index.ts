@@ -156,6 +156,14 @@ export interface CandidateFilters {
   search?: string
 }
 
+export interface SemanticCandidateResult {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+  similarity?: number | null
+}
+
 // API Response Types
 export interface ApiResponse<T> {
   success: boolean
