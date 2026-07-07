@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { User } from '@/types'
+import { api } from '@/lib/api'
 
 interface AuthState {
   user: User | null
@@ -8,6 +9,7 @@ interface AuthState {
   
   setUser: (user: User | null) => void
   setIsLoading: (loading: boolean) => void
+  loadCurrentUser: () => Promise<void>
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   register: (email: string, password: string, name: string) => Promise<void>
@@ -15,7 +17,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  isLoading: false,
+  isLoading: true,
   isAuthenticated: false,
 
   setUser: (user) => {
@@ -26,12 +28,26 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: loading })
   },
 
+  loadCurrentUser: async () => {
+    if (!localStorage.getItem('hrbot_access_token')) {
+      set({ user: null, isAuthenticated: false, isLoading: false })
+      return
+    }
+    set({ isLoading: true })
+    try {
+      const user = await api.auth.me()
+      set({ user, isAuthenticated: true, isLoading: false })
+    } catch {
+      localStorage.removeItem('hrbot_access_token')
+      set({ user: null, isAuthenticated: false, isLoading: false })
+    }
+  },
+
   login: async (email: string, password: string) => {
     set({ isLoading: true })
     try {
-      // TODO: Implement Supabase login
-      console.log('Login:', email, password)
-      set({ isLoading: false })
+      const result = await api.auth.login(email, password)
+      set({ user: result.user, isAuthenticated: true, isLoading: false })
     } catch (error) {
       set({ isLoading: false })
       throw error
@@ -41,7 +57,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: async () => {
     set({ isLoading: true })
     try {
-      // TODO: Implement Supabase logout
+      await api.auth.logout()
       set({ user: null, isAuthenticated: false, isLoading: false })
     } catch (error) {
       set({ isLoading: false })
@@ -52,9 +68,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   register: async (email: string, password: string, name: string) => {
     set({ isLoading: true })
     try {
-      // TODO: Implement Supabase registration
-      console.log('Register:', email, password, name)
-      set({ isLoading: false })
+      const result = await api.auth.register(email, password, name)
+      set({ user: result.user, isAuthenticated: true, isLoading: false })
     } catch (error) {
       set({ isLoading: false })
       throw error

@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Menu, Moon, Sun, Bell, User } from 'lucide-react'
 import { useTheme } from '@/contexts/theme-context'
 import { useAuthStore } from '@/stores/auth-store'
@@ -10,8 +11,14 @@ interface HeaderProps {
 
 export function Header({ onToggleSidebar }: HeaderProps) {
   const { theme, toggleTheme } = useTheme()
-  const { user } = useAuthStore()
+  const { user, logout } = useAuthStore()
+  const navigate = useNavigate()
   const [showUserMenu, setShowUserMenu] = useState(false)
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login')
+  }
 
   return (
     <header className="bg-card border-b border-border sticky top-0 z-30">
@@ -26,7 +33,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
 
         <div className="flex items-center gap-4">
           {/* Notifications */}
-          <button className="relative p-2 hover:bg-muted rounded-lg transition-colors">
+          <button onClick={() => alert('No new notifications')} className="relative p-2 hover:bg-muted rounded-lg transition-colors">
             <Bell className="w-5 h-5" />
             <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
           </button>
@@ -62,14 +69,14 @@ export function Header({ onToggleSidebar }: HeaderProps) {
                   <p className="text-sm font-medium">{user?.name}</p>
                   <p className="text-xs text-muted-foreground">{user?.email}</p>
                 </div>
-                <button className="w-full px-4 py-2 text-sm text-left hover:bg-muted transition-colors">
+                <button onClick={() => navigate('/settings')} className="w-full px-4 py-2 text-sm text-left hover:bg-muted transition-colors">
                   Profile
                 </button>
-                <button className="w-full px-4 py-2 text-sm text-left hover:bg-muted transition-colors">
+                <button onClick={() => navigate('/settings')} className="w-full px-4 py-2 text-sm text-left hover:bg-muted transition-colors">
                   Settings
                 </button>
                 <div className="border-t border-border my-2" />
-                <button className="w-full px-4 py-2 text-sm text-left text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                <button onClick={handleLogout} className="w-full px-4 py-2 text-sm text-left text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
                   Logout
                 </button>
               </div>

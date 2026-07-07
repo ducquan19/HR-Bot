@@ -72,9 +72,10 @@ export interface Candidate {
 export interface VirtualInterview {
   id: string
   candidateIds: string[]
+  candidateId?: string
   scheduledAt: string
   interviewLink: string
-  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+  status: 'pending' | 'sent' | 'scheduled' | 'in_progress' | 'completed' | 'expired' | 'cancelled'
   campaignId?: string
   createdBy: string
   createdAt: string

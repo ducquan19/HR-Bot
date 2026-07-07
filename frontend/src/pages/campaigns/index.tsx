@@ -1,69 +1,86 @@
-import React, { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Select } from '@/components/ui/select'
 import { Alert } from '@/components/ui/alert'
 import { useCampaignsStore } from '@/stores/campaigns-store'
 import { useCandidatesStore } from '@/stores/candidates-store'
-import { useAuthStore } from '@/stores/auth-store'
-import { formatDate, generateMockId } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
 import { Plus, Archive, Trash2, Eye, Calendar, Users, TrendingUp } from 'lucide-react'
 
 export function CampaignsPage() {
-  const { campaigns, addCampaign, updateCampaign, deleteCampaign } = useCampaignsStore()
-  const { user } = useAuthStore()
+  const { campaigns, isLoading, loadCampaigns, createCampaign, updateCampaign, deleteCampaign } = useCampaignsStore()
   const candidates = useCandidatesStore((state) => state.candidates)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null)
+  const [error, setError] = useState('')
   const [formData, setFormData] = useState({
     name: '',
-    jobPositionId: '1',
+    positionTitle: '',
+    department: '',
     endDate: '',
   })
 
-  const handleCreateCampaign = () => {
+  useEffect(() => {
+    loadCampaigns().catch((err) => setError(err instanceof Error ? err.message : 'Could not load campaigns'))
+  }, [loadCampaigns])
+
+  const handleCreateCampaign = async () => {
     if (!formData.name || !formData.endDate) {
       alert('Please fill in all fields')
       return
     }
 
-    const newCampaign = {
-      id: generateMockId(),
-      name: formData.name,
-      jobPositionId: formData.jobPositionId,
-      startDate: new Date().toISOString(),
-      endDate: formData.endDate,
-      status: 'active' as const,
-      createdBy: user?.id || 'unknown',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
-
-    addCampaign(newCampaign)
-    setFormData({ name: '', jobPositionId: '1', endDate: '' })
-    setIsModalOpen(false)
-  }
-
-  const handleArchive = (id: string) => {
-    updateCampaign(id, { status: 'archived' })
-  }
-
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this campaign?')) {
-      deleteCampaign(id)
+    const positionTitle = formData.positionTitle || formData.name
+    try {
+      await createCampaign({
+        title: formData.name,
+        deadline: new Date(`${formData.endDate}T23:59:59`).toISOString(),
+        department: formData.department || undefined,
+        positionTitle,
+        jd: {
+          overview: `Recruitment campaign for ${positionTitle}.`,
+          responsibilities: 'Review applications, screen candidates, and coordinate interviews.',
+          requirements: 'Requirements will be refined by the recruiting team.',
+        },
+        skills: [],
+        vacancies: 1,
+      })
+      setFormData({ name: '', positionTitle: '', department: '', endDate: '' })
+      setIsModalOpen(false)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create campaign')
     }
   }
 
-  const getCandidateCount = (campaignId: string) => {
-    return candidates.filter((c) => c.campaignId === campaignId).length
+  const handleArchive = async (id: string) => {
+    try {
+      await updateCampaign(id, { status: 'archived' })
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not archive campaign')
+    }
   }
 
-  const activeCampaigns = campaigns.filter((c) => c.status === 'active')
-  const archivedCampaigns = campaigns.filter((c) => c.status !== 'active')
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this campaign?')) return
+    try {
+      await deleteCampaign(id)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete campaign')
+    }
+  }
+
+  const getCandidateCount = (campaignId: string) =>
+    candidates.filter((candidate) => candidate.campaignId === campaignId).length
+
+  const activeCampaigns = campaigns.filter((campaign) => campaign.status === 'active')
+  const archivedCampaigns = campaigns.filter((campaign) => campaign.status !== 'active')
+  const selectedCampaignDetail = campaigns.find((campaign) => campaign.id === selectedCampaign)
 
   return (
     <div className="p-8">
@@ -78,7 +95,12 @@ export function CampaignsPage() {
         </Button>
       </div>
 
-      {/* Stats */}
+      {error && (
+        <Alert variant="error" title="Action failed" className="mb-6">
+          {error}
+        </Alert>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -112,10 +134,13 @@ export function CampaignsPage() {
         </Card>
       </div>
 
-      {/* Active Campaigns */}
       <div className="mb-8">
         <h2 className="text-xl font-bold mb-4">Active Campaigns</h2>
-        {activeCampaigns.length === 0 ? (
+        {isLoading ? (
+          <Card>
+            <CardContent className="py-12 text-center text-muted-foreground">Loading campaigns...</CardContent>
+          </Card>
+        ) : activeCampaigns.length === 0 ? (
           <Alert variant="info" title="No Active Campaigns">
             Create a new recruitment campaign to get started.
           </Alert>
@@ -143,16 +168,11 @@ export function CampaignsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="gap-1">
+                    <Button variant="outline" size="sm" onClick={() => setSelectedCampaign(campaign.id)} className="gap-1">
                       <Eye className="w-4 h-4" />
                       View
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleArchive(campaign.id)}
-                      className="gap-1"
-                    >
+                    <Button variant="outline" size="sm" onClick={() => handleArchive(campaign.id)} className="gap-1">
                       <Archive className="w-4 h-4" />
                       Archive
                     </Button>
@@ -173,7 +193,6 @@ export function CampaignsPage() {
         )}
       </div>
 
-      {/* Archived Campaigns */}
       {archivedCampaigns.length > 0 && (
         <div>
           <h2 className="text-xl font-bold mb-4">Archived Campaigns</h2>
@@ -211,7 +230,6 @@ export function CampaignsPage() {
         </div>
       )}
 
-      {/* Create Campaign Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -221,34 +239,52 @@ export function CampaignsPage() {
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateCampaign}>Create Campaign</Button>
+            <Button onClick={handleCreateCampaign} isLoading={isLoading}>
+              Create Campaign
+            </Button>
           </>
         }
       >
         <div className="space-y-4">
           <Input
             label="Campaign Name"
-            placeholder="e.g., Senior React Developer - Q3 2024"
+            placeholder="e.g., Senior React Developer - Q3 2026"
             value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            onChange={(event) => setFormData({ ...formData, name: event.target.value })}
           />
-          <Select
+          <Input
             label="Job Position"
-            options={[
-              { value: '1', label: 'Senior React Developer' },
-              { value: '2', label: 'Full Stack Developer' },
-              { value: '3', label: 'Junior Developer' },
-            ]}
-            value={formData.jobPositionId}
-            onChange={(e) => setFormData({ ...formData, jobPositionId: e.target.value })}
+            placeholder="e.g., Senior React Developer"
+            value={formData.positionTitle}
+            onChange={(event) => setFormData({ ...formData, positionTitle: event.target.value })}
+          />
+          <Input
+            label="Department"
+            placeholder="e.g., Engineering"
+            value={formData.department}
+            onChange={(event) => setFormData({ ...formData, department: event.target.value })}
           />
           <Input
             label="End Date"
             type="date"
             value={formData.endDate}
-            onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+            onChange={(event) => setFormData({ ...formData, endDate: event.target.value })}
           />
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!selectedCampaignDetail}
+        onClose={() => setSelectedCampaign(null)}
+        title={selectedCampaignDetail?.name || 'Campaign'}
+      >
+        {selectedCampaignDetail && (
+          <div className="space-y-3 text-sm">
+            <div><span className="text-muted-foreground">Status:</span> {selectedCampaignDetail.status}</div>
+            <div><span className="text-muted-foreground">Deadline:</span> {formatDate(selectedCampaignDetail.endDate)}</div>
+            <div><span className="text-muted-foreground">Candidates:</span> {getCandidateCount(selectedCampaignDetail.id)}</div>
+          </div>
+        )}
       </Modal>
     </div>
   )

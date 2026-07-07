@@ -2,6 +2,7 @@ import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { MainLayout } from '@/components/layout/main-layout'
 import { FullPageLoader } from '@/components/ui/loader'
+import { useAuthStore } from '@/stores/auth-store'
 
 // Auth Pages
 const LoginPage = React.lazy(() => import('@/pages/auth/login').then(m => ({ default: m.LoginPage })))
@@ -16,13 +17,19 @@ const SettingsPage = React.lazy(() => import('@/pages/settings').then(m => ({ de
 // Other Pages
 const NotFoundPage = React.lazy(() => import('@/pages/not-found').then(m => ({ default: m.NotFoundPage })))
 
-const ProtectedRoute = ({ element }: { element: React.ReactNode }) => (
-  <MainLayout>
-    <React.Suspense fallback={<FullPageLoader />}>
-      {element}
-    </React.Suspense>
-  </MainLayout>
-)
+const ProtectedRoute = ({ element }: { element: React.ReactNode }) => {
+  const { isAuthenticated, isLoading } = useAuthStore()
+  if (isLoading) return <FullPageLoader />
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+
+  return (
+    <MainLayout>
+      <React.Suspense fallback={<FullPageLoader />}>
+        {element}
+      </React.Suspense>
+    </MainLayout>
+  )
+}
 
 export function AppRoutes() {
   return (

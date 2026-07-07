@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useCandidatesStore } from '@/stores/candidates-store'
 import { useCampaignsStore } from '@/stores/campaigns-store'
@@ -5,8 +6,15 @@ import { Users, Briefcase, CheckCircle2, AlertCircle } from 'lucide-react'
 
 export function DashboardPage() {
   const candidates = useCandidatesStore((state) => state.candidates)
+  const loadCandidates = useCandidatesStore((state) => state.loadCandidates)
   const campaigns = useCampaignsStore((state) => state.campaigns)
+  const loadCampaigns = useCampaignsStore((state) => state.loadCampaigns)
   const activeCampaigns = campaigns.filter((c) => c.status === 'active')
+
+  useEffect(() => {
+    loadCandidates().catch(() => undefined)
+    loadCampaigns().catch(() => undefined)
+  }, [loadCandidates, loadCampaigns])
 
   const stats = [
     {

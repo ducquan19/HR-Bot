@@ -1,4 +1,3 @@
-import React from 'react'
 import { Candidate } from '@/types'
 import { CANDIDATE_STAGE_COLORS, CANDIDATE_STAGES } from '@/constants'
 import { Badge } from '@/components/ui/badge'

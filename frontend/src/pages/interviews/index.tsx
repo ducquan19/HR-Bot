@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -6,124 +6,116 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Modal } from '@/components/ui/modal'
 import { Textarea } from '@/components/ui/textarea'
+import { Alert } from '@/components/ui/alert'
 import { useCandidatesStore } from '@/stores/candidates-store'
-import { formatDateTime, generateMockId, getInitials } from '@/lib/utils'
-import {
-  Plus,
-  Video,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  Link2,
-  Send,
-  Download,
-} from 'lucide-react'
-
-interface Interview {
-  id: string
-  candidateId: string
-  scheduledAt: string
-  interviewLink: string
-  status: 'scheduled' | 'in_progress' | 'completed'
-  notes?: string
-}
+import { api } from '@/lib/api'
+import type { VirtualInterview } from '@/types'
+import { formatDateTime } from '@/lib/utils'
+import { Plus, Video, Clock, CheckCircle2, AlertCircle, Link2, Send } from 'lucide-react'
 
 export function InterviewsPage() {
-  const candidates = useCandidatesStore((state) => state.candidates)
-  const updateCandidate = useCandidatesStore((state) => state.updateCandidate)
-
-  const [interviews, setInterviews] = useState<Interview[]>([
-    {
-      id: generateMockId(),
-      candidateId: '1',
-      scheduledAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-      interviewLink: 'https://meet.example.com/interview-001',
-      status: 'scheduled',
-    },
-    {
-      id: generateMockId(),
-      candidateId: '3',
-      scheduledAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-      interviewLink: 'https://meet.example.com/interview-002',
-      status: 'scheduled',
-    },
-  ])
-
+  const { candidates, loadCandidates } = useCandidatesStore()
+  const [interviews, setInterviews] = useState<VirtualInterview[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState('')
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
+  const [notes, setNotes] = useState('')
 
-  const handleScheduleInterview = () => {
+  const loadInterviews = async () => {
+    setIsLoading(true)
+    try {
+      const data = await api.interviews.list()
+      setInterviews(data)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load interviews')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadInterviews()
+    loadCandidates().catch(() => undefined)
+  }, [loadCandidates])
+
+  const handleScheduleInterview = async () => {
     if (!selectedCandidate || !scheduledDate || !scheduledTime) {
       alert('Please fill in all fields')
       return
     }
 
-    const newInterview: Interview = {
-      id: generateMockId(),
-      candidateId: selectedCandidate,
-      scheduledAt: `${scheduledDate}T${scheduledTime}:00`,
-      interviewLink: `https://meet.example.com/interview-${generateMockId()}`,
-      status: 'scheduled',
-    }
-
-    setInterviews([...interviews, newInterview])
-    setSelectedCandidate('')
-    setScheduledDate('')
-    setScheduledTime('')
-    setIsModalOpen(false)
-
-    // Move candidate to virtual_interview stage
-    updateCandidate(selectedCandidate, { stage: 'virtual_interview' })
-  }
-
-  const handleSendInvite = (interview: Interview) => {
-    const candidate = candidates.find((c) => c.id === interview.candidateId)
-    if (candidate) {
-      // In a real app, this would send an email
-      alert(`Interview invitation sent to ${candidate.email}`)
+    setIsLoading(true)
+    try {
+      await api.interviews.create({
+        candidateId: selectedCandidate,
+        scheduledAt: new Date(`${scheduledDate}T${scheduledTime}:00`).toISOString(),
+        notes,
+      })
+      setSelectedCandidate('')
+      setScheduledDate('')
+      setScheduledTime('')
+      setNotes('')
+      setIsModalOpen(false)
+      await loadInterviews()
+      await loadCandidates()
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not schedule interview')
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const handleCompleteInterview = (interviewId: string) => {
-    setInterviews(
-      interviews.map((i) =>
-        i.id === interviewId ? { ...i, status: 'completed' } : i
-      )
-    )
-
-    const interview = interviews.find((i) => i.id === interviewId)
-    if (interview) {
-      updateCandidate(interview.candidateId, { stage: 'hr_review' })
+  const handleSendInvite = async (interview: VirtualInterview) => {
+    setIsLoading(true)
+    try {
+      await api.interviews.sendInvite(interview.id)
+      await loadInterviews()
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send invitation')
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const getCandidateName = (candidateId: string) => {
-    const candidate = candidates.find((c) => c.id === candidateId)
-    return candidate
-      ? `${candidate.firstName} ${candidate.lastName}`
-      : 'Unknown'
+  const handleCompleteInterview = async (interviewId: string) => {
+    setIsLoading(true)
+    try {
+      await api.interviews.updateStatus(interviewId, 'completed')
+      await loadInterviews()
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not complete interview')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const getCandidateEmail = (candidateId: string) => {
-    const candidate = candidates.find((c) => c.id === candidateId)
-    return candidate?.email || ''
+  const getCandidateId = (interview: VirtualInterview) => interview.candidateId || interview.candidateIds[0]
+  const getCandidate = (interview: VirtualInterview) => candidates.find((candidate) => candidate.id === getCandidateId(interview))
+  const getCandidateName = (interview: VirtualInterview) => {
+    const candidate = getCandidate(interview)
+    return candidate ? `${candidate.firstName} ${candidate.lastName}` : 'Unknown'
   }
+  const getCandidateEmail = (interview: VirtualInterview) => getCandidate(interview)?.email || ''
 
-  const scheduledInterviews = interviews.filter((i) => i.status === 'scheduled')
-  const completedInterviews = interviews.filter((i) => i.status === 'completed')
+  const scheduledStatuses = ['pending', 'sent', 'scheduled', 'in_progress']
+  const scheduledInterviews = interviews.filter((interview) => scheduledStatuses.includes(interview.status))
+  const completedInterviews = interviews.filter((interview) => interview.status === 'completed')
 
   const statusIcon = (status: string) => {
     switch (status) {
-      case 'scheduled':
-        return <Clock className="w-4 h-4 text-orange-600" />
-      case 'in_progress':
-        return <Video className="w-4 h-4 text-blue-600" />
       case 'completed':
         return <CheckCircle2 className="w-4 h-4 text-green-600" />
+      case 'in_progress':
+        return <Video className="w-4 h-4 text-blue-600" />
       default:
-        return null
+        return <Clock className="w-4 h-4 text-orange-600" />
     }
   }
 
@@ -140,7 +132,12 @@ export function InterviewsPage() {
         </Button>
       </div>
 
-      {/* Stats */}
+      {error && (
+        <Alert variant="error" title="Action failed" className="mb-6">
+          {error}
+        </Alert>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -152,7 +149,6 @@ export function InterviewsPage() {
             <p className="text-xs text-muted-foreground mt-1">Upcoming interviews</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Completed</CardTitle>
@@ -163,7 +159,6 @@ export function InterviewsPage() {
             <p className="text-xs text-muted-foreground mt-1">Finished interviews</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total</CardTitle>
@@ -176,10 +171,13 @@ export function InterviewsPage() {
         </Card>
       </div>
 
-      {/* Scheduled Interviews */}
       <div className="mb-8">
         <h2 className="text-xl font-bold mb-4">Upcoming Interviews</h2>
-        {scheduledInterviews.length === 0 ? (
+        {isLoading ? (
+          <Card>
+            <CardContent className="py-12 text-center text-muted-foreground">Loading interviews...</CardContent>
+          </Card>
+        ) : scheduledInterviews.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
               <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
@@ -195,17 +193,13 @@ export function InterviewsPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-3">
                         <div className="w-10 h-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-semibold">
-                          {getCandidateName(interview.candidateId)
-                            .split(' ')
-                            .map((n) => n[0])
-                            .join('')}
+                          {getCandidateName(interview).split(' ').map((name) => name[0]).join('')}
                         </div>
                         <div>
-                          <p className="font-semibold">{getCandidateName(interview.candidateId)}</p>
-                          <p className="text-sm text-muted-foreground">{getCandidateEmail(interview.candidateId)}</p>
+                          <p className="font-semibold">{getCandidateName(interview)}</p>
+                          <p className="text-sm text-muted-foreground">{getCandidateEmail(interview)}</p>
                         </div>
                       </div>
-
                       <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Scheduled For</p>
@@ -213,38 +207,23 @@ export function InterviewsPage() {
                         </div>
                         <div>
                           <p className="text-muted-foreground">Interview Link</p>
-                          <a
-                            href={interview.interviewLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary hover:underline flex items-center gap-1"
-                          >
+                          <a href={interview.interviewLink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1">
                             <Link2 className="w-3 h-3" />
                             Join Interview
                           </a>
                         </div>
                       </div>
                     </div>
-
                     <div className="flex flex-col gap-2">
-                      <Badge className="flex items-center justify-center gap-1 bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-200">
+                      <Badge className="flex items-center justify-center gap-1 bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-200 capitalize">
                         {statusIcon(interview.status)}
-                        Scheduled
+                        {interview.status.replace('_', ' ')}
                       </Badge>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleSendInvite(interview)}
-                        className="gap-1"
-                      >
+                      <Button size="sm" variant="outline" onClick={() => handleSendInvite(interview)} isLoading={isLoading} className="gap-1">
                         <Send className="w-4 h-4" />
                         Send Invite
                       </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleCompleteInterview(interview.id)}
-                        className="gap-1"
-                      >
+                      <Button size="sm" onClick={() => handleCompleteInterview(interview.id)} isLoading={isLoading} className="gap-1">
                         <CheckCircle2 className="w-4 h-4" />
                         Complete
                       </Button>
@@ -257,7 +236,6 @@ export function InterviewsPage() {
         )}
       </div>
 
-      {/* Completed Interviews */}
       {completedInterviews.length > 0 && (
         <div>
           <h2 className="text-xl font-bold mb-4">Completed Interviews</h2>
@@ -266,19 +244,9 @@ export function InterviewsPage() {
               <Card key={interview.id} className="opacity-75">
                 <CardContent className="py-6">
                   <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-semibold">
-                          {getCandidateName(interview.candidateId)
-                            .split(' ')
-                            .map((n) => n[0])
-                            .join('')}
-                        </div>
-                        <div>
-                          <p className="font-semibold">{getCandidateName(interview.candidateId)}</p>
-                          <p className="text-sm text-muted-foreground">{getCandidateEmail(interview.candidateId)}</p>
-                        </div>
-                      </div>
+                    <div>
+                      <p className="font-semibold">{getCandidateName(interview)}</p>
+                      <p className="text-sm text-muted-foreground">{getCandidateEmail(interview)}</p>
                     </div>
                     <Badge className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-200 flex items-center gap-1">
                       <CheckCircle2 className="w-4 h-4" />
@@ -292,50 +260,27 @@ export function InterviewsPage() {
         </div>
       )}
 
-      {/* Schedule Interview Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title="Schedule Virtual Interview"
         footer={
           <>
-            <Button variant="outline" onClick={() => setIsModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleScheduleInterview}>Schedule Interview</Button>
+            <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleScheduleInterview} isLoading={isLoading}>Schedule Interview</Button>
           </>
         }
       >
         <div className="space-y-4">
           <Select
             label="Select Candidate"
-            options={candidates.map((c) => ({
-              value: c.id,
-              label: `${c.firstName} ${c.lastName}`,
-            }))}
+            options={candidates.map((candidate) => ({ value: candidate.id, label: `${candidate.firstName} ${candidate.lastName}` }))}
             value={selectedCandidate}
-            onChange={(e) => setSelectedCandidate(e.target.value)}
+            onChange={(event) => setSelectedCandidate(event.target.value)}
           />
-
-          <Input
-            label="Interview Date"
-            type="date"
-            value={scheduledDate}
-            onChange={(e) => setScheduledDate(e.target.value)}
-          />
-
-          <Input
-            label="Interview Time"
-            type="time"
-            value={scheduledTime}
-            onChange={(e) => setScheduledTime(e.target.value)}
-          />
-
-          <Textarea
-            label="Notes (Optional)"
-            placeholder="Add any notes about this interview..."
-            rows={3}
-          />
+          <Input label="Interview Date" type="date" value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} />
+          <Input label="Interview Time" type="time" value={scheduledTime} onChange={(event) => setScheduledTime(event.target.value)} />
+          <Textarea label="Notes (Optional)" placeholder="Add any notes about this interview..." rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
         </div>
       </Modal>
     </div>

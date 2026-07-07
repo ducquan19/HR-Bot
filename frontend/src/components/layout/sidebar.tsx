@@ -1,5 +1,4 @@
-import React from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
   BarChart3,
@@ -8,8 +7,8 @@ import {
   Video,
   Settings,
   LogOut,
-  Menu,
 } from 'lucide-react'
+import { useAuthStore } from '@/stores/auth-store'
 
 interface SidebarProps {
   isOpen: boolean
@@ -25,6 +24,13 @@ const menuItems = [
 
 export function Sidebar({ isOpen }: SidebarProps) {
   const location = useLocation()
+  const navigate = useNavigate()
+  const logout = useAuthStore((state) => state.logout)
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login')
+  }
 
   return (
     <aside
@@ -83,6 +89,7 @@ export function Sidebar({ isOpen }: SidebarProps) {
       {/* Footer */}
       <div className="p-4 border-t border-border">
         <button
+          onClick={handleLogout}
           className={cn(
             'w-full flex items-center gap-3 px-4 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors',
           )}

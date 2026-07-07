@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+node_modules
 /.pnp
 .pnp.js
 
@@ -14,6 +15,11 @@
 
 # production
 /build
+/dist
+dist
+frontend/dist/
+backend/dist/
+frontend/package-lock.json
 
 # misc
 .DS_Store
@@ -34,3 +40,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+docs/
