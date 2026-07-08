@@ -1,5 +1,5 @@
 // User & Auth Types
-export type UserRole = 'admin' | 'recruiter'
+export type UserRole = 'admin' | 'recruiter' | 'hiring_manager'
 
 export interface User {
   id: string
@@ -15,14 +15,50 @@ export interface RecruitmentCampaign {
   id: string
   name: string
   jobPositionId: string
+  positions?: CampaignPositionSummary[]
+  positionCount?: number
+  candidateCount?: number
   startDate: string
   endDate: string
-  status: 'active' | 'archived' | 'closed'
+  status: 'draft' | 'active' | 'archived' | 'closed'
   createdBy: string
   createdAt: string
   updatedAt: string
   publicApplicationToken?: string
   publicApplicationUrl?: string
+  memberRole?: CampaignMemberRole
+  members?: CampaignMember[]
+}
+
+export interface CampaignPositionSummary {
+  id: string
+  positionId: string
+  title: string
+  department?: string
+  seniority?: string
+  employmentType?: string
+  vacancies: number
+  candidateCount: number
+  overview?: string
+  responsibilities?: string
+  requirements?: string
+  benefits?: string
+  skills: string[]
+}
+
+export type CampaignMemberRole = 'owner' | 'editor' | 'viewer'
+
+export interface CampaignMember {
+  id: string
+  userId: string
+  role: CampaignMemberRole
+  user?: {
+    id: string
+    email: string
+    name: string
+    role: UserRole
+    isActive?: boolean
+  }
 }
 
 // Job Position Types

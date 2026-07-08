@@ -16,6 +16,12 @@ export class UsersController {
     return this.users.findAll();
   }
 
+  @Get('assignable')
+  @Roles(UserRole.ADMIN, UserRole.RECRUITER, UserRole.HIRING_MANAGER)
+  findAssignable() {
+    return this.users.findAssignable();
+  }
+
   @Patch(':id/role')
   @Roles(UserRole.ADMIN)
   updateRole(@Param('id') id: string, @Body('role') role: UserRole) {

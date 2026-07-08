@@ -1,14 +1,16 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import crypto from 'crypto';
-import { ApplicationStage } from '@prisma/client';
+import { ApplicationStage, CampaignMemberRole, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../files/storage.service';
 import { CV_QUEUE } from '../queue/queue.module';
 import { AiService } from '../ai/ai.service';
 import { CandidateQueryDto, ScoreCandidatesDto, UploadCandidateDto } from './dto/candidate.dto';
 import { buildCandidateReportPdf, pdfHeading, pdfSection, pdfWrapped } from './candidate-report-pdf';
+
+type CandidateUser = { id: string; role: string };
 
 @Injectable()
 export class CandidatesService {
@@ -19,7 +21,7 @@ export class CandidatesService {
     @InjectQueue(CV_QUEUE) private readonly cvQueue: Queue,
   ) {}
 
-  async findAll(query: CandidateQueryDto) {
+  async findAll(user: CandidateUser, query: CandidateQueryDto) {
     const where: any = {};
     if (query.search) {
       where.OR = [
@@ -45,24 +47,30 @@ export class CandidatesService {
     }
 
     const profiles = await this.prisma.candidateProfile.findMany({
-      where,
+      where: this.withCandidateAccess(user, where),
       include: this.includeCandidate(),
       orderBy: { createdAt: 'desc' },
     });
     return profiles.map((profile) => this.toFrontendCandidate(profile));
   }
 
-  async findOne(id: string) {
+  async findOne(user: CandidateUser, id: string) {
     const profile = await this.prisma.candidateProfile.findUnique({ where: { id }, include: this.includeCandidate() });
     if (!profile) throw new NotFoundException('Candidate not found');
+    this.ensureCanAccessCandidate(user, profile);
     return this.toFrontendCandidate(profile, true);
   }
 
-  async upload(userId: string | undefined, dto: UploadCandidateDto, file: Express.Multer.File) {
+  async upload(user: CandidateUser | undefined, dto: UploadCandidateDto, file: Express.Multer.File) {
     if (!file) throw new BadRequestException('CV file is required');
     if (file.size > 10 * 1024 * 1024) throw new BadRequestException('CV file size must not exceed 10MB');
     if (!this.isSupportedCvFile(file)) {
       throw new BadRequestException('Only PDF and DOCX files are supported');
+    }
+
+    const campaignPositionId = await this.resolveCampaignPosition(dto);
+    if (user && campaignPositionId) {
+      await this.ensureCanEditCampaignPosition(user, campaignPositionId);
     }
 
     const checksum = crypto.createHash('sha256').update(file.buffer).digest('hex');
@@ -78,16 +86,15 @@ export class CandidatesService {
         mimeType: file.mimetype,
         sizeBytes: file.size,
         checksum,
-        uploadedById: userId,
+        uploadedById: user?.id,
         processingStatus: 'QUEUED',
       },
     });
 
-    const campaignPositionId = await this.resolveCampaignPosition(dto);
     if (campaignPositionId) {
       await this.prisma.candidateApplication.upsert({
         where: { candidateProfileId_campaignPositionId: { candidateProfileId: candidate.id, campaignPositionId } },
-        create: { candidateProfileId: candidate.id, campaignPositionId, cvId: cv.id, source: userId ? 'RECRUITER_UPLOAD' : 'APPLICATION_FORM' },
+        create: { candidateProfileId: candidate.id, campaignPositionId, cvId: cv.id, source: user ? 'RECRUITER_UPLOAD' : 'APPLICATION_FORM' },
         update: { cvId: cv.id },
       });
     }
@@ -95,20 +102,37 @@ export class CandidatesService {
     await this.prisma.fileProcessingJob.create({ data: { cvId: cv.id, type: 'CV_PARSE_AND_SCREEN', status: 'QUEUED' } });
     await this.cvQueue.add('parse-and-screen', { cvId: cv.id, bufferBase64: file.buffer.toString('base64'), mimeType: file.mimetype }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 } });
 
-    return this.findOne(candidate.id);
+    if (!user) {
+      return this.toFrontendCandidate(await this.prisma.candidateProfile.findUniqueOrThrow({ where: { id: candidate.id }, include: this.includeCandidate() }), true);
+    }
+    return this.findOne(user, candidate.id);
   }
 
-  async updateStage(candidateId: string, stage: ApplicationStage) {
-    const application = await this.prisma.candidateApplication.findFirst({ where: { candidateProfileId: candidateId }, orderBy: { appliedAt: 'desc' } });
+  async updateStage(user: CandidateUser, candidateId: string, stage: ApplicationStage) {
+    const application = await this.prisma.candidateApplication.findFirst({
+      where: { candidateProfileId: candidateId },
+      orderBy: { appliedAt: 'desc' },
+      include: { campaignPosition: { include: { campaign: { include: { members: true } } } } },
+    });
     if (!application) throw new NotFoundException('Application not found');
+    this.ensureCanEditCampaign(user, application.campaignPosition.campaign);
     await this.prisma.candidateApplication.update({ where: { id: application.id }, data: { currentStage: stage } });
-    return this.findOne(candidateId);
+    return this.findOne(user, candidateId);
   }
 
-  async score(dto: ScoreCandidatesDto) {
+  async score(user: CandidateUser, dto: ScoreCandidatesDto) {
     const where: any = {};
     if (dto.candidateIds?.length) where.candidateProfileId = { in: dto.candidateIds };
-    if (dto.campaignId) where.campaignPosition = { campaignId: dto.campaignId };
+    if (dto.campaignId) {
+      where.campaignPosition = {
+        campaignId: dto.campaignId,
+        campaign: this.withCampaignEditAccess(user),
+      };
+    } else {
+      where.campaignPosition = {
+        campaign: this.withCampaignEditAccess(user),
+      };
+    }
     const applications = await this.prisma.candidateApplication.findMany({
       where,
       include: {
@@ -127,12 +151,13 @@ export class CandidatesService {
     return { count: results.length, results };
   }
 
-  async getCvDownloadUrl(candidateId: string, cvId: string) {
+  async getCvDownloadUrl(user: CandidateUser, candidateId: string, cvId: string) {
+    await this.findOne(user, candidateId);
     const cv = await this.prisma.cv.findFirstOrThrow({ where: { id: cvId, candidateProfileId: candidateId } });
     return { url: await this.storage.getSignedDownloadUrl(cv.storagePath) };
   }
 
-  async generateReportPdf(candidateId: string) {
+  async generateReportPdf(user: CandidateUser, candidateId: string) {
     const profile = await this.prisma.candidateProfile.findUnique({
       where: { id: candidateId },
       include: {
@@ -144,7 +169,7 @@ export class CandidatesService {
           orderBy: { appliedAt: 'desc' },
           include: {
             screeningResult: true,
-            campaignPosition: { include: { campaign: true, position: { include: { jobDescription: true } } } },
+            campaignPosition: { include: { campaign: { include: { members: true } }, position: { include: { jobDescription: true } } } },
             interviewSessions: {
               orderBy: { createdAt: 'desc' },
               take: 1,
@@ -155,6 +180,7 @@ export class CandidatesService {
       },
     });
     if (!profile) throw new NotFoundException('Candidate not found');
+    this.ensureCanAccessCandidate(user, profile);
 
     const app = profile.applications[0];
     const screening = app?.screeningResult;
@@ -264,8 +290,81 @@ export class CandidatesService {
       education: true,
       experiences: true,
       cvs: { orderBy: { createdAt: 'desc' as const }, take: 1, include: { aiExtractions: { orderBy: { createdAt: 'desc' as const }, take: 1 } } },
-      applications: { orderBy: { appliedAt: 'desc' as const }, include: { screeningResult: true, campaignPosition: true } },
+      applications: {
+        orderBy: { appliedAt: 'desc' as const },
+        include: { screeningResult: true, campaignPosition: { include: { campaign: { include: { members: true } } } } },
+      },
     };
+  }
+
+  private withCandidateAccess(user: CandidateUser, where: any = {}) {
+    if (this.isAdmin(user)) return where;
+    return {
+      AND: [
+        where,
+        {
+          OR: [
+            { cvs: { some: { uploadedById: user.id } } },
+            {
+              applications: {
+                some: {
+                  campaignPosition: {
+                    campaign: {
+                      OR: [{ createdById: user.id }, { members: { some: { userId: user.id } } }],
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  private withCampaignEditAccess(user: CandidateUser) {
+    if (this.isAdmin(user)) return {};
+    return {
+      OR: [
+        { createdById: user.id },
+        { members: { some: { userId: user.id, role: { in: [CampaignMemberRole.OWNER, CampaignMemberRole.EDITOR] } } } },
+      ],
+    };
+  }
+
+  private ensureCanAccessCandidate(user: CandidateUser, profile: any) {
+    if (this.isAdmin(user)) return;
+    const uploadedByUser = profile.cvs?.some((cv: any) => cv.uploadedById === user.id);
+    const campaignMember = profile.applications?.some((app: any) => {
+      const campaign = app.campaignPosition?.campaign;
+      return campaign?.createdById === user.id || campaign?.members?.some((member: any) => member.userId === user.id);
+    });
+    if (!uploadedByUser && !campaignMember) {
+      throw new ForbiddenException('You do not have access to this candidate');
+    }
+  }
+
+  private async ensureCanEditCampaignPosition(user: CandidateUser, campaignPositionId: string) {
+    const campaignPosition = await this.prisma.campaignPosition.findUnique({
+      where: { id: campaignPositionId },
+      include: { campaign: { include: { members: true } } },
+    });
+    if (!campaignPosition) throw new NotFoundException('Campaign position not found');
+    this.ensureCanEditCampaign(user, campaignPosition.campaign);
+  }
+
+  private ensureCanEditCampaign(user: CandidateUser, campaign: any) {
+    if (this.isAdmin(user)) return;
+    const canEdit =
+      campaign.createdById === user.id ||
+      campaign.members?.some((member: any) => member.userId === user.id && [CampaignMemberRole.OWNER, CampaignMemberRole.EDITOR].includes(member.role));
+    if (!canEdit) {
+      throw new ForbiddenException('You do not have permission to modify this campaign');
+    }
+  }
+
+  private isAdmin(user: CandidateUser) {
+    return user.role === UserRole.ADMIN || user.role === 'admin';
   }
 
   private toFrontendCandidate(profile: any, detailed = false) {

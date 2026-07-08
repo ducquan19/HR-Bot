@@ -13,6 +13,12 @@ enum UserRole {
   HIRING_MANAGER
 }
 
+enum CampaignMemberRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
 enum CampaignStatus {
   DRAFT
   ACTIVE
@@ -111,6 +117,7 @@ model User {
   refreshTokens   RefreshToken[]
   resetTokens     PasswordResetToken[]
   interviewSessions InterviewSession[]  @relation("InterviewCreatedBy")
+  campaignMemberships CampaignMember[]
 
   @@map("users")
 }
@@ -157,10 +164,28 @@ model RecruitmentCampaign {
   createdBy         User               @relation("CampaignCreatedBy", fields: [createdById], references: [id])
   campaignPositions CampaignPosition[]
   applicationForm   ApplicationForm?
+  members           CampaignMember[]
 
   @@index([status])
   @@index([createdById])
   @@map("recruitment_campaigns")
+}
+
+model CampaignMember {
+  id         String             @id @default(uuid()) @db.Uuid
+  campaignId String             @map("campaign_id") @db.Uuid
+  userId     String             @map("user_id") @db.Uuid
+  role       CampaignMemberRole @default(VIEWER)
+  addedById  String?            @map("added_by") @db.Uuid
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+
+  campaign RecruitmentCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([userId])
+  @@map("campaign_members")
 }
 
 model JobPosition {

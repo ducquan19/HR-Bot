@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsArray, IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
-import { CampaignStatus, EmploymentType } from '@prisma/client';
+import { CampaignMemberRole, CampaignStatus, EmploymentType } from '@prisma/client';
 
 export class JobDescriptionDto {
   @IsString()
@@ -39,6 +39,40 @@ export class PositionSkillDto {
   isRequired?: boolean;
 }
 
+export class CreateCampaignPositionDto {
+  @IsString()
+  @IsNotEmpty()
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  department?: string;
+
+  @IsOptional()
+  @IsString()
+  seniority?: string;
+
+  @IsOptional()
+  @IsEnum(EmploymentType)
+  employmentType?: EmploymentType;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => JobDescriptionDto)
+  jd?: JobDescriptionDto;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PositionSkillDto)
+  skills?: PositionSkillDto[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  vacancies?: number;
+}
+
 export class CreateCampaignDto {
   @IsString()
   @IsNotEmpty()
@@ -59,8 +93,9 @@ export class CreateCampaignDto {
   @IsEnum(CampaignStatus)
   status?: CampaignStatus;
 
+  @IsOptional()
   @IsString()
-  positionTitle!: string;
+  positionTitle?: string;
 
   @IsOptional()
   @IsString()
@@ -70,9 +105,10 @@ export class CreateCampaignDto {
   @IsEnum(EmploymentType)
   employmentType?: EmploymentType;
 
+  @IsOptional()
   @ValidateNested()
   @Type(() => JobDescriptionDto)
-  jd!: JobDescriptionDto;
+  jd?: JobDescriptionDto;
 
   @IsOptional()
   @IsArray()
@@ -84,6 +120,12 @@ export class CreateCampaignDto {
   @IsInt()
   @Min(1)
   vacancies?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateCampaignPositionDto)
+  positions?: CreateCampaignPositionDto[];
 }
 
 export class UpdateCampaignDto {
@@ -108,10 +150,63 @@ export class UpdateCampaignDto {
   status?: CampaignStatus;
 }
 
+export class UpdateCampaignPositionDto {
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  department?: string;
+
+  @IsOptional()
+  @IsString()
+  seniority?: string;
+
+  @IsOptional()
+  @IsEnum(EmploymentType)
+  employmentType?: EmploymentType;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  vacancies?: number;
+
+  @IsOptional()
+  @IsString()
+  overview?: string;
+
+  @IsOptional()
+  @IsString()
+  responsibilities?: string;
+
+  @IsOptional()
+  @IsString()
+  requirements?: string;
+
+  @IsOptional()
+  @IsString()
+  benefits?: string;
+}
+
 export class CreateApplicationFormDto {
   @IsOptional()
   isPublic?: boolean;
 
   @IsOptional()
   enabledFields?: Record<string, boolean>;
+}
+
+export class UpsertCampaignMemberDto {
+  @IsString()
+  userId!: string;
+
+  @IsOptional()
+  @IsEnum(CampaignMemberRole)
+  role?: CampaignMemberRole;
+}
+
+export class UpdateCampaignMemberDto {
+  @IsEnum(CampaignMemberRole)
+  role!: CampaignMemberRole;
 }

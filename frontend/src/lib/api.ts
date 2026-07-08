@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '@/constants'
-import type { ApiResponse, Candidate, CandidateFilters, PublicApplicationForm, PublicInterviewSession, RecruitmentCampaign, SemanticCandidateResult, User, VirtualInterview } from '@/types'
+import type { ApiResponse, CampaignMember, CampaignPositionSummary, Candidate, CandidateFilters, PublicApplicationForm, PublicInterviewSession, RecruitmentCampaign, SemanticCandidateResult, User, VirtualInterview } from '@/types'
 
 function toBackendEnum(value?: string) {
   return value?.toUpperCase()
@@ -80,6 +80,15 @@ export const api = {
       return request<RecruitmentCampaign>(`/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
     },
     remove: (id: string) => request<{ id: string }>(`/campaigns/${id}`, { method: 'DELETE' }),
+    updatePosition: (id: string, campaignPositionId: string, payload: unknown) =>
+      request<CampaignPositionSummary>(`/campaigns/${id}/positions/${campaignPositionId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    members: (id: string) => request<CampaignMember[]>(`/campaigns/${id}/members`),
+    addMember: (id: string, userId: string, role: string) => request<CampaignMember>(`/campaigns/${id}/members`, { method: 'POST', body: JSON.stringify({ userId, role: toBackendEnum(role) }) }),
+    updateMember: (id: string, memberId: string, role: string) => request<CampaignMember>(`/campaigns/${id}/members/${memberId}`, { method: 'PATCH', body: JSON.stringify({ role: toBackendEnum(role) }) }),
+    removeMember: (id: string, memberId: string) => request<{ id: string }>(`/campaigns/${id}/members/${memberId}`, { method: 'DELETE' }),
+  },
+  users: {
+    assignable: () => request<User[]>('/users/assignable'),
   },
   candidates: {
     list: (filters: CandidateFilters = {}) => {
