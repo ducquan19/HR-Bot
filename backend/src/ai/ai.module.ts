@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { CV_QUEUE, INTERVIEW_QUEUE, QueueModule } from '../queue/queue.module';
 import { FilesModule } from '../files/files.module';
@@ -8,7 +9,7 @@ import { CvProcessingWorker } from './cv-processing.worker';
 import { InterviewEvaluationWorker } from './interview-evaluation.worker';
 
 @Module({
-  imports: [QueueModule, FilesModule, RealtimeModule, BullModule.registerQueue({ name: CV_QUEUE }, { name: INTERVIEW_QUEUE })],
+  imports: [ConfigModule, QueueModule, FilesModule, RealtimeModule, BullModule.registerQueue({ name: CV_QUEUE }, { name: INTERVIEW_QUEUE })],
   providers: [AiService, CvProcessingWorker, InterviewEvaluationWorker],
   exports: [AiService],
 })
