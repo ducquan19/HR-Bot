@@ -8,7 +8,7 @@ export class SearchService {
 
   async semanticCandidates(query: string, limit = 20) {
     if (!query?.trim()) return [];
-    const embedding = await this.ai.embed(query);
+    const embedding = await this.ai.embed(query, 'query');
     const vectorLiteral = `[${embedding.join(',')}]`;
     try {
       return await this.prisma.$queryRawUnsafe(
