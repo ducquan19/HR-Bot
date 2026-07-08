@@ -10,7 +10,7 @@ import { CvProcessingWorker } from './cv-processing.worker';
 import { InterviewEvaluationWorker } from './interview-evaluation.worker';
 
 @Module({
-  imports: [QueueModule, FilesModule, RealtimeModule, BullModule.registerQueue({ name: CV_QUEUE }, { name: INTERVIEW_QUEUE })],
+  imports: [ConfigModule, QueueModule, FilesModule, RealtimeModule, BullModule.registerQueue({ name: CV_QUEUE }, { name: INTERVIEW_QUEUE })],
   providers: [AiService, CandidateScreeningService, CvProcessingWorker, InterviewEvaluationWorker],
   exports: [AiService, CandidateScreeningService],
 })
