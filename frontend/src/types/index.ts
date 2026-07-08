@@ -89,6 +89,8 @@ export interface Candidate {
   email: string
   phone: string
   cvUrl: string
+  cvProcessingStatus?: 'uploaded' | 'queued' | 'parsing' | 'screening' | 'completed' | 'failed'
+  cvProcessingError?: string
   stage: CandidateStage
   score?: number
   skills: string[]

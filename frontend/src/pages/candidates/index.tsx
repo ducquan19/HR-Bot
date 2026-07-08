@@ -10,8 +10,8 @@ import { useCandidatesStore } from '@/stores/candidates-store'
 import { useCampaignsStore } from '@/stores/campaigns-store'
 import { CANDIDATE_STAGES, CANDIDATE_STAGE_COLORS, COMMON_SKILLS } from '@/constants'
 import { api } from '@/lib/api'
-import { formatDate, getInitials } from '@/lib/utils'
-import { Check, Download, Search, Upload, Zap, Eye, Phone, Mail } from 'lucide-react'
+import { formatDate, formatExperienceDuration, getInitials } from '@/lib/utils'
+import { Check, Download, Search, Upload, Eye, Mail, Trash2 } from 'lucide-react'
 import type { Candidate, CandidateSearchMode, SemanticCandidateResult } from '@/types'
 
 export function CandidatesPage() {
@@ -21,8 +21,8 @@ export function CandidatesPage() {
     toggleCandidateSelection,
     loadCandidates,
     uploadCandidate,
-    scoreCandidates,
     updateCandidate,
+    deleteCandidate,
     isLoading,
   } = useCandidatesStore()
   const { campaigns, loadCampaigns } = useCampaignsStore()
@@ -49,14 +49,12 @@ export function CandidatesPage() {
   const [detailCandidate, setDetailCandidate] = useState<Candidate | null>(null)
   const [isDetailLoading, setIsDetailLoading] = useState(false)
   const [isReportDownloading, setIsReportDownloading] = useState(false)
-  const [showScoreModal, setShowScoreModal] = useState(false)
+  const [isCvDownloading, setIsCvDownloading] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState('')
   const [uploadForm, setUploadForm] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
     campaignId: '',
     file: null as File | null,
   })
@@ -65,6 +63,16 @@ export function CandidatesPage() {
     loadCandidates().catch((err) => setError(err instanceof Error ? err.message : 'Could not load candidates'))
     loadCampaigns().catch(() => undefined)
   }, [loadCandidates, loadCampaigns])
+
+  useEffect(() => {
+    const hasProcessingCandidates = candidates.some((candidate) => isCandidateProcessing(candidate))
+    if (!hasProcessingCandidates) return
+
+    const interval = window.setInterval(() => {
+      loadCandidates().catch(() => undefined)
+    }, 3000)
+    return () => window.clearInterval(interval)
+  }, [candidates, loadCandidates])
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -96,34 +104,19 @@ export function CandidatesPage() {
     }
   }
 
-  const handleScoreAll = async () => {
-    try {
-      const candidateIds = selectedCandidates.length > 0 ? selectedCandidates : displayedCandidates.map((candidate) => candidate.id)
-      await scoreCandidates(candidateIds)
-      setShowScoreModal(false)
-      setError('')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not score candidates')
-    }
-  }
-
   const handleUpload = async () => {
-    if (!uploadForm.firstName || !uploadForm.lastName || !uploadForm.email || !uploadForm.file) {
-      alert('Please fill in candidate information and choose a CV')
+    if (!uploadForm.campaignId || !uploadForm.file) {
+      alert('Please choose a campaign and CV file')
       return
     }
 
     const formData = new FormData()
-    formData.set('firstName', uploadForm.firstName)
-    formData.set('lastName', uploadForm.lastName)
-    formData.set('email', uploadForm.email)
-    formData.set('phone', uploadForm.phone)
-    if (uploadForm.campaignId) formData.set('campaignId', uploadForm.campaignId)
+    formData.set('campaignId', uploadForm.campaignId)
     formData.set('cv', uploadForm.file)
 
     try {
       await uploadCandidate(formData)
-      setUploadForm({ firstName: '', lastName: '', email: '', phone: '', campaignId: '', file: null })
+      setUploadForm({ campaignId: '', file: null })
       setShowUploadModal(false)
       setError('')
     } catch (err) {
@@ -226,8 +219,45 @@ export function CandidatesPage() {
     }
   }
 
+  const handleDownloadCv = async () => {
+    if (!selectedDetail) return
+    setIsCvDownloading(true)
+    try {
+      const name = `${selectedDetail.firstName}-${selectedDetail.lastName}`.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      await api.candidates.downloadCv(selectedDetail.id, `${name || 'candidate'}-cv`)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not download candidate CV')
+    } finally {
+      setIsCvDownloading(false)
+    }
+  }
+
+  const handleDeleteCandidate = async () => {
+    if (!deleteTargetId) return
+    setIsDeleting(true)
+    try {
+      await deleteCandidate(deleteTargetId)
+      setSearchResults((results) => results?.filter((candidate) => candidate.id !== deleteTargetId) ?? null)
+      if (selectedCandidate === deleteTargetId) {
+        setSelectedCandidate(null)
+        setDetailCandidate(null)
+        setShowDetailModal(false)
+      }
+      setDeleteTargetId(null)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete candidate')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const selectedDetail = detailCandidate ?? candidates.find((candidate) => candidate.id === selectedCandidate)
     ?? searchResults?.find((candidate) => candidate.id === selectedCandidate)
+  const deleteTarget = candidates.find((candidate) => candidate.id === deleteTargetId)
+    ?? searchResults?.find((candidate) => candidate.id === deleteTargetId)
+    ?? (selectedDetail?.id === deleteTargetId ? selectedDetail : undefined)
   const extractedInfo = selectedDetail?.extractedInfo ?? {}
   const extractedSummary = typeof extractedInfo.summary === 'string' ? extractedInfo.summary : ''
   const extractedProjects = Array.isArray(extractedInfo.projects) ? extractedInfo.projects : []
@@ -241,10 +271,70 @@ export function CandidatesPage() {
     return typeof project?.description === 'string' ? project.description : ''
   }
   const aiScore = selectedDetail?.screeningResult?.overallScore ?? (selectedDetail?.score !== undefined ? selectedDetail.score * 100 : undefined)
+  const isPlaceholderEmail = (email?: string) => email?.endsWith('@upload.hrbot.local') ?? false
+  const isCandidateProcessing = (candidate: Candidate) => (
+    candidate.cvProcessingStatus === 'uploaded' ||
+    candidate.cvProcessingStatus === 'queued' ||
+    candidate.cvProcessingStatus === 'parsing' ||
+    candidate.cvProcessingStatus === 'screening'
+  )
+  const getProcessingLabel = (candidate: Candidate) => {
+    if (candidate.cvProcessingStatus === 'queued' || candidate.cvProcessingStatus === 'uploaded') return 'Waiting to process CV'
+    if (candidate.cvProcessingStatus === 'parsing') return 'Parsing CV with AI'
+    if (candidate.cvProcessingStatus === 'screening') return 'Scoring with AI'
+    if (candidate.cvProcessingStatus === 'failed') return 'CV processing failed'
+    return 'Processing CV'
+  }
+  const renderCandidateContact = (candidate: Candidate) => {
+    if (isCandidateProcessing(candidate)) {
+      return (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          <span>{getProcessingLabel(candidate)}</span>
+        </div>
+      )
+    }
+
+    if (candidate.cvProcessingStatus === 'failed') {
+      return <span className="text-red-600">{getProcessingLabel(candidate)}</span>
+    }
+
+    if (isPlaceholderEmail(candidate.email)) {
+      return <span className="text-muted-foreground">Email not found in CV</span>
+    }
+
+    return (
+      <a href={`mailto:${candidate.email}`} className="flex items-center gap-1 hover:text-foreground">
+        <Mail className="w-3 h-3" />
+        {candidate.email}
+      </a>
+    )
+  }
   const renderDetailList = (items?: string[]) => (
     items?.length ? (
       <div className="flex flex-wrap gap-2">
         {items.map((item) => <Badge key={item} variant="secondary">{item}</Badge>)}
+      </div>
+    ) : (
+      <p className="text-sm text-muted-foreground">No data yet</p>
+    )
+  )
+  const renderInsightList = (items?: string[]) => (
+    items?.length ? (
+      <div className="space-y-2">
+        {items.map((item) => {
+          const isLong = item.length > 48
+          return (
+            <div
+              key={item}
+              className={`break-words bg-muted px-3 py-2 text-sm text-muted-foreground ${
+                isLong ? 'rounded-md leading-relaxed' : 'inline-block rounded-full'
+              }`}
+            >
+              {item}
+            </div>
+          )
+        })}
       </div>
     ) : (
       <p className="text-sm text-muted-foreground">No data yet</p>
@@ -259,10 +349,6 @@ export function CandidatesPage() {
           <p className="text-muted-foreground">Review and manage candidate profiles</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={() => setShowScoreModal(true)}>
-            <Zap className="w-4 h-4" />
-            Score All
-          </Button>
           <Button className="gap-2" onClick={() => setShowUploadModal(true)}>
             <Upload className="w-4 h-4" />
             Upload CV
@@ -511,16 +597,7 @@ export function CandidatesPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <a href={`mailto:${candidate.email}`} className="flex items-center gap-1 hover:text-foreground">
-                        <Mail className="w-3 h-3" />
-                        {candidate.email}
-                      </a>
-                      {candidate.phone && (
-                        <a href={`tel:${candidate.phone}`} className="flex items-center gap-1 hover:text-foreground">
-                          <Phone className="w-3 h-3" />
-                          {candidate.phone}
-                        </a>
-                      )}
+                      {renderCandidateContact(candidate)}
                     </div>
                   </div>
                   <div className="flex items-center gap-6">
@@ -538,6 +615,15 @@ export function CandidatesPage() {
                         className="gap-1"
                       >
                         <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteTargetId(candidate.id)}
+                        className="text-red-600 hover:text-red-700"
+                        aria-label={`Delete ${candidate.firstName} ${candidate.lastName}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
                       </Button>
                       <Select
                         options={Object.entries(CANDIDATE_STAGES).map(([key, value]) => ({ value: key, label: value }))}
@@ -560,14 +646,22 @@ export function CandidatesPage() {
           setDetailCandidate(null)
         }}
         title={selectedDetail ? `${selectedDetail.firstName} ${selectedDetail.lastName}` : 'Candidate Details'}
-        className="max-w-[50rem] max-h-[90vh] overflow-y-auto"
+        className="w-[min(50rem,calc(100vw-2rem))] max-w-[50rem] max-h-[90vh] overflow-y-auto"
       >
         {isDetailLoading && (
           <p className="text-sm text-muted-foreground">Loading candidate details...</p>
         )}
         {!isDetailLoading && selectedDetail && (
           <div className="space-y-4">
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setDeleteTargetId(selectedDetail.id)} className="gap-2 text-red-600 hover:text-red-700">
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownloadCv} isLoading={isCvDownloading} className="gap-2">
+                <Download className="w-4 h-4" />
+                Download CV
+              </Button>
               <Button variant="outline" size="sm" onClick={handleDownloadReport} isLoading={isReportDownloading} className="gap-2">
                 <Download className="w-4 h-4" />
                 Export PDF
@@ -609,7 +703,7 @@ export function CandidatesPage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Experience</p>
-                <p className="font-medium">{selectedDetail.experience} years</p>
+                <p className="font-medium">{formatExperienceDuration(selectedDetail.experience)}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">GPA</p>
@@ -626,7 +720,7 @@ export function CandidatesPage() {
             </div>
             {(extractedSummary || extractedProjects.length > 0) && (
               <div className="rounded-md border border-border p-4">
-                <p className="text-sm font-medium mb-2">Extracted CV Profile</p>
+                <p className="text-sm font-medium mb-2">Overview</p>
                 {extractedSummary && <p className="text-sm text-muted-foreground mb-3">{extractedSummary}</p>}
                 {extractedProjects.length > 0 && (
                   <div className="space-y-2">
@@ -666,11 +760,11 @@ export function CandidatesPage() {
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div>
                     <p className="text-xs uppercase text-muted-foreground mb-2">Strengths</p>
-                    {renderDetailList(selectedDetail.screeningResult.strengths)}
+                    {renderInsightList(selectedDetail.screeningResult.strengths)}
                   </div>
                   <div>
                     <p className="text-xs uppercase text-muted-foreground mb-2">Weaknesses</p>
-                    {renderDetailList(selectedDetail.screeningResult.weaknesses)}
+                    {renderInsightList(selectedDetail.screeningResult.weaknesses)}
                   </div>
                   <div>
                     <p className="text-xs uppercase text-muted-foreground mb-2">Missing Skills</p>
@@ -684,21 +778,23 @@ export function CandidatesPage() {
       </Modal>
 
       <Modal
-        isOpen={showScoreModal}
-        onClose={() => setShowScoreModal(false)}
-        title="Score Candidates with AI"
+        isOpen={Boolean(deleteTargetId)}
+        onClose={() => {
+          if (!isDeleting) setDeleteTargetId(null)
+        }}
+        title="Delete Candidate"
         footer={
           <>
-            <Button variant="outline" onClick={() => setShowScoreModal(false)}>Cancel</Button>
-            <Button onClick={handleScoreAll} isLoading={isLoading} className="gap-2">
-              <Zap className="w-4 h-4" />
-              Score Now
+            <Button variant="outline" onClick={() => setDeleteTargetId(null)} disabled={isDeleting}>Cancel</Button>
+            <Button variant="danger" onClick={handleDeleteCandidate} isLoading={isDeleting} className="gap-2">
+              <Trash2 className="w-4 h-4" />
+              Delete
             </Button>
           </>
         }
       >
         <p className="text-sm text-muted-foreground">
-          This will use AI to score {selectedCandidates.length || displayedCandidates.length} candidate(s) based on available CV and campaign data.
+          Delete {deleteTarget ? `${deleteTarget.firstName} ${deleteTarget.lastName}` : 'this candidate'} and all related CV, application, screening, and interview data?
         </p>
       </Modal>
 
@@ -714,15 +810,9 @@ export function CandidatesPage() {
         }
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="First Name" value={uploadForm.firstName} onChange={(event) => setUploadForm({ ...uploadForm, firstName: event.target.value })} />
-            <Input label="Last Name" value={uploadForm.lastName} onChange={(event) => setUploadForm({ ...uploadForm, lastName: event.target.value })} />
-          </div>
-          <Input label="Email" type="email" value={uploadForm.email} onChange={(event) => setUploadForm({ ...uploadForm, email: event.target.value })} />
-          <Input label="Phone" value={uploadForm.phone} onChange={(event) => setUploadForm({ ...uploadForm, phone: event.target.value })} />
           <Select
             label="Campaign"
-            options={[{ value: '', label: 'No campaign' }, ...campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))]}
+            options={[{ value: '', label: 'Select campaign' }, ...campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))]}
             value={uploadForm.campaignId}
             onChange={(event) => setUploadForm({ ...uploadForm, campaignId: event.target.value })}
           />
