@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -6,6 +7,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CandidatesService } from './candidates.service';
 import { CandidateQueryDto, ScoreCandidatesDto, UpdateCandidateStageDto, UploadCandidateDto } from './dto/candidate.dto';
 
+@ApiTags('Candidates')
 @Controller('candidates')
 export class CandidatesController {
   constructor(private readonly candidates: CandidatesService) {}
