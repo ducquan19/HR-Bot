@@ -39,6 +39,12 @@ export class StorageService implements OnModuleInit {
     return key;
   }
 
+  async downloadBuffer(key: string) {
+    const response = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    if (!response.Body) throw new Error(`Object ${key} has no readable body`);
+    return Buffer.from(await response.Body.transformToByteArray());
+  }
+
   async getSignedDownloadUrl(key: string, expiresIn = 3600) {
     return getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn });
   }

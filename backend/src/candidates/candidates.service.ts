@@ -100,7 +100,7 @@ export class CandidatesService {
     }
 
     await this.prisma.fileProcessingJob.create({ data: { cvId: cv.id, type: 'CV_PARSE_AND_SCREEN', status: 'QUEUED' } });
-    await this.cvQueue.add('parse-and-screen', { cvId: cv.id, bufferBase64: file.buffer.toString('base64'), mimeType: file.mimetype }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 } });
+    await this.cvQueue.add('parse-and-screen', { cvId: cv.id, storagePath: key, mimeType: file.mimetype }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 } });
 
     if (!user) {
       return this.toFrontendCandidate(await this.prisma.candidateProfile.findUniqueOrThrow({ where: { id: candidate.id }, include: this.includeCandidate() }), true);
