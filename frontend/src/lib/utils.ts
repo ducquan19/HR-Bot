@@ -33,6 +33,17 @@ export function formatScore(score: number | undefined): string {
   return `${Math.round(score * 100)}%`
 }
 
+export function formatExperienceDuration(years: number | undefined): string {
+  if (years === undefined || Number.isNaN(years) || years <= 0) return '0 months'
+  const totalMonths = Math.round(years * 12)
+  const wholeYears = Math.floor(totalMonths / 12)
+  const months = totalMonths % 12
+  const parts = []
+  if (wholeYears) parts.push(`${wholeYears} ${wholeYears === 1 ? 'year' : 'years'}`)
+  if (months) parts.push(`${months} ${months === 1 ? 'month' : 'months'}`)
+  return parts.join(' ') || '0 months'
+}
+
 export function generateMockId(): string {
   return Math.random().toString(36).substring(2, 11)
 }
