@@ -2,10 +2,14 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { INTERVIEW_QUEUE } from '../queue/queue.module';
 import { PrismaService } from '../prisma/prisma.service';
+import { AiService } from './ai.service';
 
 @Processor(INTERVIEW_QUEUE)
 export class InterviewEvaluationWorker extends WorkerHost {
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ai: AiService,
+  ) {
     super();
   }
 
@@ -15,11 +19,12 @@ export class InterviewEvaluationWorker extends WorkerHost {
       include: { questions: { include: { answer: true } } },
     });
     if (!session) return;
-    const answered = session.questions.filter((q) => q.answer?.answer).length;
-    const score = session.questions.length ? Math.round((answered / session.questions.length) * 100) : 0;
+    
+    const evaluation = await this.ai.evaluateInterview(session.questions);
+    
     await this.prisma.interviewSession.update({
       where: { id: session.id },
-      data: { aiEvaluation: { score, feedback: 'Mock interview evaluation. Replace with LLM rubric evaluator.' } },
+      data: { aiEvaluation: evaluation },
     });
   }
 }

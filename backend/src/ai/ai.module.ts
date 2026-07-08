@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { CV_QUEUE, INTERVIEW_QUEUE, QueueModule } from '../queue/queue.module';
 import { FilesModule } from '../files/files.module';
