@@ -80,6 +80,8 @@ export const api = {
       return request<RecruitmentCampaign>(`/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
     },
     remove: (id: string) => request<{ id: string }>(`/campaigns/${id}`, { method: 'DELETE' }),
+    addPosition: (id: string, payload: unknown) =>
+      request<CampaignPositionSummary>(`/campaigns/${id}/positions`, { method: 'POST', body: JSON.stringify(payload) }),
     updatePosition: (id: string, campaignPositionId: string, payload: unknown) =>
       request<CampaignPositionSummary>(`/campaigns/${id}/positions/${campaignPositionId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     members: (id: string) => request<CampaignMember[]>(`/campaigns/${id}/members`),

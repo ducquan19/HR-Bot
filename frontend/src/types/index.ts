@@ -151,7 +151,9 @@ export interface PublicApplicationForm {
     seniority?: string
     employmentType: string
     overview?: string
+    responsibilities?: string
     requirements?: string
+    benefits?: string
     skills: string[]
   }>
 }

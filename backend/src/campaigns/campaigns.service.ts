@@ -66,41 +66,7 @@ export class CampaignsService {
       });
 
       for (const positionDto of positions) {
-        const position = await tx.jobPosition.create({
-          data: {
-            title: positionDto.title,
-            department: positionDto.department ?? dto.department,
-            seniority: positionDto.seniority,
-            employmentType: positionDto.employmentType ?? 'FULL_TIME',
-            createdById: userId,
-            jobDescription: { create: positionDto.jd },
-          },
-        });
-
-        for (const s of positionDto.skills ?? []) {
-          const skill = await tx.skill.upsert({
-            where: { name: s.name },
-            create: { name: s.name, category: s.category },
-            update: { category: s.category },
-          });
-          await tx.positionSkill.create({
-            data: {
-              positionId: position.id,
-              skillId: skill.id,
-              requiredLevel: SkillLevel.INTERMEDIATE,
-              weight: s.weight ?? 1,
-              isRequired: s.isRequired ?? true,
-            },
-          });
-        }
-
-        await tx.campaignPosition.create({
-          data: {
-            campaignId: campaign.id,
-            positionId: position.id,
-            vacancies: positionDto.vacancies ?? 1,
-          },
-        });
+        await this.createCampaignPosition(tx, campaign.id, userId, positionDto, dto.department);
       }
 
       await tx.campaignMember.create({
@@ -159,6 +125,19 @@ export class CampaignsService {
         enabledFields: dto.enabledFields,
       },
     });
+  }
+
+  async addPosition(user: CampaignUser, campaignId: string, dto: CreateCampaignPositionDto) {
+    const campaign = await this.findCampaignForAccess(campaignId);
+    this.ensureCanEdit(user, campaign);
+    this.validateCreatePosition(dto, 1);
+
+    const campaignPosition = await this.prisma.$transaction((tx) => this.createCampaignPosition(tx, campaignId, user.id, dto, campaign.department ?? undefined));
+    const created = await this.prisma.campaignPosition.findUniqueOrThrow({
+      where: { id: campaignPosition.id },
+      include: { position: { include: { jobDescription: true, positionSkills: { include: { skill: true } } } }, applications: true },
+    });
+    return this.toFrontendPosition(created);
   }
 
   async updatePosition(user: CampaignUser, campaignId: string, campaignPositionId: string, dto: UpdateCampaignPositionDto) {
@@ -226,6 +205,9 @@ export class CampaignsService {
   async upsertMember(user: CampaignUser, campaignId: string, dto: UpsertCampaignMemberDto) {
     const campaign = await this.findCampaignForAccess(campaignId);
     this.ensureCanManageMembers(user, campaign);
+    if (dto.userId === user.id) {
+      throw new BadRequestException('You are already a member of this campaign');
+    }
     if (dto.userId === campaign.createdById && dto.role && dto.role !== CampaignMemberRole.OWNER) {
       throw new BadRequestException('Campaign creator must remain an owner');
     }
@@ -308,7 +290,9 @@ export class CampaignsService {
         seniority: campaignPosition.position.seniority,
         employmentType: campaignPosition.position.employmentType,
         overview: campaignPosition.position.jobDescription?.overview,
+        responsibilities: campaignPosition.position.jobDescription?.responsibilities,
         requirements: campaignPosition.position.jobDescription?.requirements,
+        benefits: campaignPosition.position.jobDescription?.benefits,
         skills: campaignPosition.position.positionSkills.map((positionSkill) => positionSkill.skill.name),
       })),
     };
@@ -362,10 +346,7 @@ export class CampaignsService {
 
   private normalizeCreatePositions(dto: CreateCampaignDto): CreateCampaignPositionDto[] {
     if (dto.positions?.length) {
-      dto.positions.forEach((position, index) => {
-        if (!position.title?.trim()) throw new BadRequestException(`Position ${index + 1} title is required`);
-        if (!position.jd) throw new BadRequestException(`Position ${index + 1} job description is required`);
-      });
+      dto.positions.forEach((position, index) => this.validateCreatePosition(position, index + 1));
       return dto.positions;
     }
     if (!dto.positionTitle || !dto.jd) {
@@ -382,6 +363,49 @@ export class CampaignsService {
         vacancies: dto.vacancies,
       },
     ];
+  }
+
+  private validateCreatePosition(position: CreateCampaignPositionDto, index: number) {
+    if (!position.title?.trim()) throw new BadRequestException(`Position ${index} title is required`);
+    if (!position.jd) throw new BadRequestException(`Position ${index} job description is required`);
+  }
+
+  private async createCampaignPosition(tx: any, campaignId: string, userId: string, positionDto: CreateCampaignPositionDto, fallbackDepartment?: string) {
+    const position = await tx.jobPosition.create({
+      data: {
+        title: positionDto.title,
+        department: positionDto.department ?? fallbackDepartment,
+        seniority: positionDto.seniority,
+        employmentType: positionDto.employmentType ?? 'FULL_TIME',
+        createdById: userId,
+        jobDescription: { create: positionDto.jd },
+      },
+    });
+
+    for (const s of positionDto.skills ?? []) {
+      const skill = await tx.skill.upsert({
+        where: { name: s.name },
+        create: { name: s.name, category: s.category },
+        update: { category: s.category },
+      });
+      await tx.positionSkill.create({
+        data: {
+          positionId: position.id,
+          skillId: skill.id,
+          requiredLevel: SkillLevel.INTERMEDIATE,
+          weight: s.weight ?? 1,
+          isRequired: s.isRequired ?? true,
+        },
+      });
+    }
+
+    return tx.campaignPosition.create({
+      data: {
+        campaignId,
+        positionId: position.id,
+        vacancies: positionDto.vacancies ?? 1,
+      },
+    });
   }
 
   private toFrontendCampaign(campaign: any, user?: CampaignUser) {
