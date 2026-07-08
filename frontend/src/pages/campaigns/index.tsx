@@ -12,18 +12,20 @@ import { useCandidatesStore } from '@/stores/candidates-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
-import { Plus, Archive, Trash2, Eye, Calendar, Users, TrendingUp, Copy, ExternalLink } from 'lucide-react'
+import { Plus, Archive, Trash2, Eye, Calendar, Users, TrendingUp, Copy, ExternalLink, RotateCcw } from 'lucide-react'
 import type { CampaignMember, CampaignMemberRole, CampaignPositionSummary, User } from '@/types'
 
 interface CampaignFormPosition {
   title: string
   department: string
+  employmentType: string
   vacancies: number
 }
 
 interface PositionEditForm {
   title: string
   department: string
+  employmentType: string
   vacancies: number
   overview: string
   responsibilities: string
@@ -31,11 +33,32 @@ interface PositionEditForm {
   benefits: string
 }
 
-const createEmptyPosition = (): CampaignFormPosition => ({ title: '', department: '', vacancies: 1 })
+const employmentTypeOptions = [
+  { value: 'full_time', label: 'Full-time' },
+  { value: 'part_time', label: 'Part-time' },
+  { value: 'contract', label: 'Contract' },
+  { value: 'internship', label: 'Internship' },
+]
+
+const toBackendEmploymentType = (value: string) => value.toUpperCase()
+
+const createEmptyPosition = (): CampaignFormPosition => ({ title: '', department: '', employmentType: 'full_time', vacancies: 1 })
+
+const createEmptyPositionEditForm = (): PositionEditForm => ({
+  title: '',
+  department: '',
+  employmentType: 'full_time',
+  vacancies: 1,
+  overview: '',
+  responsibilities: '',
+  requirements: '',
+  benefits: '',
+})
 
 const positionToEditForm = (position: CampaignPositionSummary): PositionEditForm => ({
   title: position.title,
   department: position.department ?? '',
+  employmentType: position.employmentType ?? 'full_time',
   vacancies: position.vacancies,
   overview: position.overview ?? '',
   responsibilities: position.responsibilities ?? '',
@@ -58,6 +81,7 @@ export function CampaignsPage() {
   const [editingPositionId, setEditingPositionId] = useState<string | null>(null)
   const [positionEditForm, setPositionEditForm] = useState<PositionEditForm | null>(null)
   const [isSavingPosition, setIsSavingPosition] = useState(false)
+  const [isAddingPosition, setIsAddingPosition] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     department: '',
@@ -101,6 +125,7 @@ export function CampaignsPage() {
         positions: positions.map((position) => ({
           title: position.title.trim(),
           department: position.department.trim() || formData.department || undefined,
+          employmentType: toBackendEmploymentType(position.employmentType),
           vacancies: Number(position.vacancies) || 1,
           jd: {
             overview: `Recruitment campaign for ${position.title.trim()}.`,
@@ -124,6 +149,15 @@ export function CampaignsPage() {
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not archive campaign')
+    }
+  }
+
+  const handleActivate = async (id: string) => {
+    try {
+      await updateCampaign(id, { status: 'active' })
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not activate campaign')
     }
   }
 
@@ -154,7 +188,7 @@ export function CampaignsPage() {
     selectedMemberRole === 'owner' ||
     selectedMemberRole === 'editor'
   const availableMemberOptions = assignableUsers
-    .filter((user) => !members.some((member) => member.userId === user.id))
+    .filter((user) => user.id !== currentUser?.id && !members.some((member) => member.userId === user.id))
     .map((user) => ({ value: user.id, label: `${user.name} (${user.email})` }))
   const memberRoleOptions = [
     { value: 'viewer', label: 'Viewer' },
@@ -215,6 +249,11 @@ export function CampaignsPage() {
     }
   }
 
+  const getMemberUser = (member: CampaignMember) => {
+    const fallbackUser = assignableUsers.find((user) => user.id === member.userId)
+    return member.user ?? fallbackUser
+  }
+
   const startEditPosition = (position: CampaignPositionSummary) => {
     setEditingPositionId(position.id)
     setPositionEditForm(positionToEditForm(position))
@@ -223,6 +262,7 @@ export function CampaignsPage() {
   const cancelEditPosition = () => {
     setEditingPositionId(null)
     setPositionEditForm(null)
+    setIsAddingPosition(false)
   }
 
   const updatePositionEditForm = (updates: Partial<PositionEditForm>) => {
@@ -236,6 +276,7 @@ export function CampaignsPage() {
       await api.campaigns.updatePosition(selectedCampaign, positionId, {
         title: positionEditForm.title.trim(),
         department: positionEditForm.department.trim() || undefined,
+        employmentType: toBackendEmploymentType(positionEditForm.employmentType),
         vacancies: Number(positionEditForm.vacancies) || 1,
         overview: positionEditForm.overview,
         responsibilities: positionEditForm.responsibilities,
@@ -247,6 +288,39 @@ export function CampaignsPage() {
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update position')
+    } finally {
+      setIsSavingPosition(false)
+    }
+  }
+
+  const startAddPosition = () => {
+    setEditingPositionId(null)
+    setPositionEditForm(createEmptyPositionEditForm())
+    setIsAddingPosition(true)
+  }
+
+  const handleAddPosition = async () => {
+    if (!selectedCampaign || !positionEditForm || !positionEditForm.title.trim()) return
+    setIsSavingPosition(true)
+    try {
+      await api.campaigns.addPosition(selectedCampaign, {
+        title: positionEditForm.title.trim(),
+        department: positionEditForm.department.trim() || undefined,
+        employmentType: toBackendEmploymentType(positionEditForm.employmentType),
+        vacancies: Number(positionEditForm.vacancies) || 1,
+        jd: {
+          overview: positionEditForm.overview,
+          responsibilities: positionEditForm.responsibilities,
+          requirements: positionEditForm.requirements,
+          benefits: positionEditForm.benefits || undefined,
+        },
+        skills: [],
+      })
+      await loadCampaigns()
+      cancelEditPosition()
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add position')
     } finally {
       setIsSavingPosition(false)
     }
@@ -390,15 +464,21 @@ export function CampaignsPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDelete(campaign.id)}
-                    className="gap-1 text-red-600 hover:text-red-700"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Delete
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => handleActivate(campaign.id)} className="gap-1">
+                      <RotateCcw className="w-4 h-4" />
+                      Activate
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDelete(campaign.id)}
+                      className="gap-1 text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -450,7 +530,7 @@ export function CampaignsPage() {
               </Button>
             </div>
             {formData.positions.map((position, index) => (
-              <div key={index} className="grid grid-cols-1 gap-2 rounded-md border border-border p-3 sm:grid-cols-[1fr_1fr_96px_auto]">
+              <div key={index} className="grid grid-cols-1 gap-3 rounded-md border border-border p-3 md:grid-cols-2">
                 <Input
                   placeholder="Position title"
                   value={position.title}
@@ -461,22 +541,29 @@ export function CampaignsPage() {
                   value={position.department}
                   onChange={(event) => updateFormPosition(index, { department: event.target.value })}
                 />
-                <Input
-                  type="number"
-                  min={1}
-                  value={position.vacancies}
-                  onChange={(event) => updateFormPosition(index, { vacancies: Number(event.target.value) || 1 })}
+                <Select
+                  value={position.employmentType}
+                  options={employmentTypeOptions}
+                  onChange={(event) => updateFormPosition(index, { employmentType: event.target.value })}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => removeFormPosition(index)}
-                  disabled={formData.positions.length === 1}
-                  className="text-red-600"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 md:col-span-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={position.vacancies}
+                    onChange={(event) => updateFormPosition(index, { vacancies: Number(event.target.value) || 1 })}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => removeFormPosition(index)}
+                    disabled={formData.positions.length === 1}
+                    className="text-red-600"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -497,14 +584,83 @@ export function CampaignsPage() {
             <div className="border-t border-border pt-4">
               <div className="flex items-center justify-between mb-3">
                 <p className="font-medium">Positions</p>
-                {canEditPositions && <span className="text-xs text-muted-foreground">Owner and editor can update requirements</span>}
+                {canEditPositions && (
+                  <Button variant="outline" size="sm" onClick={startAddPosition} className="gap-1">
+                    <Plus className="w-4 h-4" />
+                    Add Position
+                  </Button>
+                )}
               </div>
               <div className="space-y-2">
+                {isAddingPosition && positionEditForm && (
+                  <div className="rounded-md border border-border p-3">
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <Input
+                          label="Title"
+                          value={positionEditForm.title}
+                          onChange={(event) => updatePositionEditForm({ title: event.target.value })}
+                        />
+                        <Input
+                          label="Department"
+                          value={positionEditForm.department}
+                          onChange={(event) => updatePositionEditForm({ department: event.target.value })}
+                        />
+                        <Select
+                          label="Employment Type"
+                          value={positionEditForm.employmentType}
+                          options={employmentTypeOptions}
+                          onChange={(event) => updatePositionEditForm({ employmentType: event.target.value })}
+                        />
+                        <Input
+                          className="md:max-w-40"
+                          label="Vacancies"
+                          type="number"
+                          min={1}
+                          value={positionEditForm.vacancies}
+                          onChange={(event) => updatePositionEditForm({ vacancies: Number(event.target.value) || 1 })}
+                        />
+                      </div>
+                      <Textarea
+                        label="Overview"
+                        rows={3}
+                        value={positionEditForm.overview}
+                        onChange={(event) => updatePositionEditForm({ overview: event.target.value })}
+                      />
+                      <Textarea
+                        label="Responsibilities"
+                        rows={4}
+                        value={positionEditForm.responsibilities}
+                        onChange={(event) => updatePositionEditForm({ responsibilities: event.target.value })}
+                      />
+                      <Textarea
+                        label="Requirements"
+                        rows={5}
+                        value={positionEditForm.requirements}
+                        onChange={(event) => updatePositionEditForm({ requirements: event.target.value })}
+                      />
+                      <Textarea
+                        label="Benefits"
+                        rows={3}
+                        value={positionEditForm.benefits}
+                        onChange={(event) => updatePositionEditForm({ benefits: event.target.value })}
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={cancelEditPosition}>
+                          Cancel
+                        </Button>
+                        <Button size="sm" onClick={handleAddPosition} isLoading={isSavingPosition}>
+                          Save Position
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {selectedCampaignDetail.positions?.map((position) => (
                   <div key={position.id} className="rounded-md border border-border p-3">
                     {editingPositionId === position.id && positionEditForm ? (
                       <div className="space-y-3">
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_110px]">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                           <Input
                             label="Title"
                             value={positionEditForm.title}
@@ -515,7 +671,14 @@ export function CampaignsPage() {
                             value={positionEditForm.department}
                             onChange={(event) => updatePositionEditForm({ department: event.target.value })}
                           />
+                          <Select
+                            label="Employment Type"
+                            value={positionEditForm.employmentType}
+                            options={employmentTypeOptions}
+                            onChange={(event) => updatePositionEditForm({ employmentType: event.target.value })}
+                          />
                           <Input
+                            className="md:max-w-40"
                             label="Vacancies"
                             type="number"
                             min={1}
@@ -575,10 +738,33 @@ export function CampaignsPage() {
                           </div>
                         </div>
                         <p className="mt-2 text-xs text-muted-foreground">Vacancies: {position.vacancies}</p>
+                        {position.overview && (
+                          <div className="mt-3">
+                            <p className="text-xs font-medium mb-1">Overview</p>
+                            <p className="text-xs text-muted-foreground whitespace-pre-wrap">{position.overview}</p>
+                          </div>
+                        )}
+                        {position.responsibilities && (
+                          <div className="mt-3">
+                            <p className="text-xs font-medium mb-1">Responsibilities</p>
+                            <p className="text-xs text-muted-foreground whitespace-pre-wrap">{position.responsibilities}</p>
+                          </div>
+                        )}
                         {position.requirements && (
                           <div className="mt-3">
                             <p className="text-xs font-medium mb-1">Requirements</p>
                             <p className="text-xs text-muted-foreground whitespace-pre-wrap">{position.requirements}</p>
+                          </div>
+                        )}
+                        {position.benefits && (
+                          <div className="mt-3">
+                            <p className="text-xs font-medium mb-1">Benefits</p>
+                            <p className="text-xs text-muted-foreground whitespace-pre-wrap">{position.benefits}</p>
+                          </div>
+                        )}
+                        {position.skills.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {position.skills.map((skill) => <Badge key={skill} variant="secondary">{skill}</Badge>)}
                           </div>
                         )}
                       </>
@@ -590,7 +776,7 @@ export function CampaignsPage() {
             </div>
             {publicApplicationLink && (
               <div>
-                <p className="text-muted-foreground mb-2">Public application link</p>
+                <p className="font-medium mb-2">Public application link</p>
                 <div className="flex gap-2">
                   <Input readOnly value={publicApplicationLink} />
                   <Button variant="outline" onClick={() => navigator.clipboard.writeText(publicApplicationLink)} title="Copy link">
@@ -608,29 +794,36 @@ export function CampaignsPage() {
                 {isMembersLoading && <span className="text-xs text-muted-foreground">Loading...</span>}
               </div>
               <div className="space-y-2">
-                {members.map((member) => (
-                  <div key={member.id} className="flex items-center gap-2 rounded-md border border-border p-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{member.user?.name || member.user?.email || member.userId}</p>
-                      <p className="text-xs text-muted-foreground truncate">{member.user?.email}</p>
+                {members.map((member) => {
+                  const memberUser = getMemberUser(member)
+                  const isCreator = member.userId === selectedCampaignDetail.createdBy
+                  return (
+                    <div key={member.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md border border-border p-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{memberUser?.name || memberUser?.email || member.userId}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {[memberUser?.email, isCreator ? 'Creator' : undefined].filter(Boolean).join(' - ')}
+                        </p>
+                      </div>
+                      {canManageMembers && !isCreator ? (
+                        <div className="w-32">
+                          <Select
+                            value={member.role}
+                            options={memberRoleOptions}
+                            onChange={(event) => handleUpdateMemberRole(member.id, event.target.value)}
+                          />
+                        </div>
+                      ) : (
+                        <Badge variant="secondary">{isCreator ? 'owner' : member.role}</Badge>
+                      )}
+                      {canManageMembers && !isCreator && (
+                        <Button variant="outline" size="sm" onClick={() => handleRemoveMember(member.id)} className="text-red-600">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
-                    {canManageMembers ? (
-                      <Select
-                        value={member.role}
-                        options={memberRoleOptions}
-                        onChange={(event) => handleUpdateMemberRole(member.id, event.target.value)}
-                        className="w-28"
-                      />
-                    ) : (
-                      <Badge variant="secondary">{member.role}</Badge>
-                    )}
-                    {canManageMembers && member.userId !== selectedCampaignDetail.createdBy && (
-                      <Button variant="outline" size="sm" onClick={() => handleRemoveMember(member.id)} className="text-red-600">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
                 {members.length === 0 && <p className="text-sm text-muted-foreground">No campaign members yet.</p>}
               </div>
               {canManageMembers && (

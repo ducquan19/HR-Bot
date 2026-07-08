@@ -3,7 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CampaignsService } from './campaigns.service';
-import { CreateApplicationFormDto, CreateCampaignDto, UpdateCampaignDto, UpdateCampaignMemberDto, UpdateCampaignPositionDto, UpsertCampaignMemberDto } from './dto/campaign.dto';
+import { CreateApplicationFormDto, CreateCampaignDto, CreateCampaignPositionDto, UpdateCampaignDto, UpdateCampaignMemberDto, UpdateCampaignPositionDto, UpsertCampaignMemberDto } from './dto/campaign.dto';
 
 @ApiTags('Campaigns')
 @UseGuards(JwtAuthGuard)
@@ -39,6 +39,11 @@ export class CampaignsController {
   @Post(':id/application-form')
   createApplicationForm(@CurrentUser() user: { id: string; role: string }, @Param('id') id: string, @Body() dto: CreateApplicationFormDto) {
     return this.campaigns.createOrUpdateForm(user, id, dto);
+  }
+
+  @Post(':id/positions')
+  addPosition(@CurrentUser() user: { id: string; role: string }, @Param('id') id: string, @Body() dto: CreateCampaignPositionDto) {
+    return this.campaigns.addPosition(user, id, dto);
   }
 
   @Patch(':id/positions/:campaignPositionId')

@@ -30,7 +30,11 @@ export default () => ({
     from: process.env.MAIL_FROM ?? 'HR Bot <no-reply@hrbot.local>',
   },
   ai: {
-    provider: process.env.AI_PROVIDER ?? 'mock',
+    provider: process.env.AI_PROVIDER ?? (process.env.GEMINI_API_KEY ? 'gemini' : 'mock'),
     embeddingDimension: parseInt(process.env.EMBEDDING_DIMENSION ?? '1536', 10),
+    geminiApiKey: process.env.GEMINI_API_KEY,
+    geminiModel: process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite',
+    geminiEmbeddingModel: process.env.GEMINI_EMBEDDING_MODEL ?? 'gemini-embedding-2',
+    geminiEndpoint: process.env.GEMINI_ENDPOINT ?? 'https://generativelanguage.googleapis.com/v1beta',
   },
 });

@@ -318,9 +318,26 @@ model CandidateProfile {
   projects     CandidateProject[]
   certifications CandidateCertification[]
   talentPools  TalentPoolCandidate[]
+  embeddings    CandidateEmbedding[]
 
   @@index([email])
   @@map("candidate_profiles")
+}
+
+model CandidateEmbedding {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  candidateProfileId String   @map("candidate_profile_id") @db.Uuid
+  sourceType         String   @default("profile") @map("source_type") @db.VarChar(50)
+  sourceId           String?  @map("source_id") @db.Uuid
+  content            String
+  embedding          Unsupported("vector")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  candidateProfile CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+
+  @@index([candidateProfileId])
+  @@index([sourceType, sourceId])
+  @@map("candidate_embeddings")
 }
 
 model Cv {

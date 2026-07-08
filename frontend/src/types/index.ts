@@ -89,6 +89,8 @@ export interface Candidate {
   email: string
   phone: string
   cvUrl: string
+  cvProcessingStatus?: 'uploaded' | 'queued' | 'parsing' | 'screening' | 'completed' | 'failed'
+  cvProcessingError?: string
   stage: CandidateStage
   score?: number
   skills: string[]
@@ -151,7 +153,9 @@ export interface PublicApplicationForm {
     seniority?: string
     employmentType: string
     overview?: string
+    responsibilities?: string
     requirements?: string
+    benefits?: string
     skills: string[]
   }>
 }
@@ -192,12 +196,26 @@ export interface CandidateFilters {
   search?: string
 }
 
-export interface SemanticCandidateResult {
-  id: string
-  firstName: string
-  lastName: string
-  email: string
+export interface SemanticCandidateResult extends Candidate {
   similarity?: number | null
+}
+
+export type CandidateSearchMode = 'criteria' | 'semantic'
+
+export interface CandidateSearchPayload {
+  mode: CandidateSearchMode
+  query?: string
+  name?: string
+  education?: string
+  skill?: string
+  skills?: string[]
+  skillOperator?: 'and' | 'or'
+  stage?: string
+  experienceMin?: number
+  experienceMax?: number
+  scoreMin?: number
+  scoreMax?: number
+  limit?: number
 }
 
 // API Response Types

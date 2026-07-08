@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '@/constants'
-import type { ApiResponse, CampaignMember, CampaignPositionSummary, Candidate, CandidateFilters, PublicApplicationForm, PublicInterviewSession, RecruitmentCampaign, SemanticCandidateResult, User, VirtualInterview } from '@/types'
+import type { ApiResponse, CampaignMember, CampaignPositionSummary, Candidate, CandidateFilters, CandidateSearchPayload, PublicApplicationForm, PublicInterviewSession, RecruitmentCampaign, SemanticCandidateResult, User, VirtualInterview } from '@/types'
 
 function toBackendEnum(value?: string) {
   return value?.toUpperCase()
@@ -44,6 +44,16 @@ async function download(path: string, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+async function downloadUrl(url: string, filename: string) {
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
 export const api = {
   auth: {
     async login(email: string, password: string) {
@@ -80,6 +90,8 @@ export const api = {
       return request<RecruitmentCampaign>(`/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
     },
     remove: (id: string) => request<{ id: string }>(`/campaigns/${id}`, { method: 'DELETE' }),
+    addPosition: (id: string, payload: unknown) =>
+      request<CampaignPositionSummary>(`/campaigns/${id}/positions`, { method: 'POST', body: JSON.stringify(payload) }),
     updatePosition: (id: string, campaignPositionId: string, payload: unknown) =>
       request<CampaignPositionSummary>(`/campaigns/${id}/positions/${campaignPositionId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     members: (id: string) => request<CampaignMember[]>(`/campaigns/${id}/members`),
@@ -102,9 +114,15 @@ export const api = {
     },
     get: (id: string) => request<Candidate>(`/candidates/${id}`),
     downloadReport: (id: string, filename = 'candidate-evaluation-report.pdf') => download(`/candidates/${id}/report.pdf`, filename),
+    downloadCv: async (id: string, fallbackFilename = 'candidate-cv') => {
+      const result = await request<{ url: string; filename?: string }>(`/candidates/${id}/cv/download`)
+      return downloadUrl(result.url, result.filename || fallbackFilename)
+    },
     upload: (formData: FormData) => request<Candidate>('/candidates/upload', { method: 'POST', body: formData }),
+    search: (payload: CandidateSearchPayload) => request<SemanticCandidateResult[]>('/candidates/search', { method: 'POST', body: JSON.stringify(payload) }),
     updateStage: (id: string, stage: string) => request<Candidate>(`/candidates/${id}/stage`, { method: 'PATCH', body: JSON.stringify({ stage: toBackendEnum(stage) }) }),
     score: (candidateIds?: string[], campaignId?: string) => request('/candidates/score', { method: 'POST', body: JSON.stringify({ candidateIds, campaignId }) }),
+    remove: (id: string) => request<{ id: string }>(`/candidates/${id}`, { method: 'DELETE' }),
     publicUpload: (formData: FormData) => request<Candidate>('/candidates/public/upload', { method: 'POST', body: formData }),
   },
   interviews: {
