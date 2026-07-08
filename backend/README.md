@@ -5,7 +5,7 @@ NestJS backend for the HR Bot React/Vite app. API responses use the `{ success, 
 ## Tech Stack
 
 - NestJS REST API + WebSocket Gateway
-- PostgreSQL + Prisma ORM + JSONB + optional pgvector extension
+- PostgreSQL + Prisma ORM + JSONB + pgvector extension
 - Redis + BullMQ for asynchronous CV processing
 - MinIO/S3-compatible storage for original CV files
 - Gemini CV extraction with mock fallback for local development
@@ -22,12 +22,12 @@ cd backend
 npm install
 npx prisma generate
 npx prisma migrate dev
-psql "$DATABASE_URL" -f prisma/sql/pgvector.sql  # optional, for semantic search
 npm run prisma:seed
 npm run start:dev
 ```
 
 The API runs at `http://localhost:3000/api`.
+The migrations create the pgvector extension and `candidate_embeddings` table used by semantic search.
 
 Seed accounts:
 
