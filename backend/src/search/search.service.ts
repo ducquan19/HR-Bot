@@ -69,6 +69,8 @@ export class SearchService {
       email: profile.email,
       phone: profile.phone ?? '',
       cvUrl: cv ? `/api/candidates/${profile.id}/cv/${cv.id}/download` : '',
+      cvProcessingStatus: cv?.processingStatus?.toLowerCase(),
+      cvProcessingError: cv?.processingError,
       stage: (app?.currentStage ?? 'APPLIED').toLowerCase(),
       score,
       skills: profile.skills?.map((item: any) => item.skill.name) ?? [],

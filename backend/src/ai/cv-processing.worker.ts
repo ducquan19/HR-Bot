@@ -6,6 +6,7 @@ import mammoth from 'mammoth';
 import { CV_QUEUE } from '../queue/queue.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiService, ParsedCv } from './ai.service';
+import { CandidateScreeningService } from './candidate-screening.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { StorageService } from '../files/storage.service';
 import { Prisma } from '@prisma/client';
@@ -23,6 +24,7 @@ export class CvProcessingWorker extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ai: AiService,
+    private readonly screening: CandidateScreeningService,
     private readonly realtime: RealtimeGateway,
     private readonly storage: StorageService,
   ) {
@@ -56,17 +58,7 @@ export class CvProcessingWorker extends WorkerHost {
 
       for (const app of cv.applications) {
         await this.prisma.cv.update({ where: { id: cvId }, data: { processingStatus: 'SCREENING' } });
-        const result = await this.ai.screenCandidate({
-          parsedCv: parsed,
-          jd: app.campaignPosition.position.jobDescription,
-          positionSkills: app.campaignPosition.position.positionSkills,
-        });
-        await this.prisma.screeningResult.upsert({
-          where: { applicationId: app.id },
-          create: { applicationId: app.id, ...result },
-          update: result,
-        });
-        await this.prisma.candidateApplication.update({ where: { id: app.id }, data: { currentStage: 'SCREENING' } });
+        await this.screening.screenApplication(app.id, parsed);
       }
 
       await this.prisma.cv.update({ where: { id: cvId }, data: { processingStatus: 'COMPLETED' } });
@@ -232,7 +224,7 @@ export class CvProcessingWorker extends WorkerHost {
       ['Summary', parsed.summary],
       ['Skills', this.uniqueStrings(parsed.skills).join(', ')],
       ['Education', this.uniqueStrings(parsed.education).join('; ')],
-      ['Experience', (parsed.experiences ?? []).map((experience) => [experience.title, experience.company, experience.description, experience.years ? `${experience.years} years` : undefined].filter(Boolean).join(' - ')).filter(Boolean).join('; ')],
+      ['Experience', (parsed.experiences ?? []).map((experience) => [experience.title, experience.company, experience.description, experience.years ? this.formatExperienceDuration(experience.years) : undefined].filter(Boolean).join(' - ')).filter(Boolean).join('; ')],
       ['Projects', this.uniqueStrings(parsed.projects).join('; ')],
       ['Certifications', this.uniqueStrings(parsed.certifications).join('; ')],
       ['Languages', this.uniqueStrings(parsed.languages).join('; ')],
@@ -293,5 +285,16 @@ export class CvProcessingWorker extends WorkerHost {
     const day = Number(yearMonthDay[3] ?? 1);
     const date = new Date(Date.UTC(year, month - 1, day));
     return Number.isNaN(date.getTime()) ? undefined : date;
+  }
+
+  private formatExperienceDuration(years?: number) {
+    if (!years || Number.isNaN(years) || years <= 0) return '0 months';
+    const totalMonths = Math.round(years * 12);
+    const wholeYears = Math.floor(totalMonths / 12);
+    const months = totalMonths % 12;
+    const parts = [];
+    if (wholeYears) parts.push(`${wholeYears} ${wholeYears === 1 ? 'year' : 'years'}`);
+    if (months) parts.push(`${months} ${months === 1 ? 'month' : 'months'}`);
+    return parts.join(' ') || '0 months';
   }
 }

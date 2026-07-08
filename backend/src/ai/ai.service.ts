@@ -58,6 +58,43 @@ const parsedCvJsonSchema = {
   required: ['education', 'skills', 'experienceYears', 'experiences', 'projects', 'certifications', 'languages', 'summary'],
 } as const;
 
+const scoreSchema = z.coerce.number().transform((value) => Math.max(0, Math.min(100, Math.round(value))));
+
+const screeningResultSchema = z.object({
+  overallScore: scoreSchema,
+  skillScore: scoreSchema,
+  educationScore: scoreSchema,
+  experienceScore: scoreSchema,
+  recommendation: z.preprocess(
+    (value) => String(value ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_'),
+    z.nativeEnum(Recommendation),
+  ),
+  strengths: z.array(z.string()).default([]),
+  weaknesses: z.array(z.string()).default([]),
+  missingSkills: z.array(z.string()).default([]),
+  explanation: z.string().optional(),
+});
+
+const screeningResultJsonSchema = {
+  type: 'object',
+  properties: {
+    overallScore: { type: 'number', description: 'Overall matching score from 0 to 100.' },
+    skillScore: { type: 'number', description: 'Skill matching score from 0 to 100.' },
+    educationScore: { type: 'number', description: 'Education fit score from 0 to 100.' },
+    experienceScore: { type: 'number', description: 'Experience fit score from 0 to 100.' },
+    recommendation: {
+      type: 'string',
+      enum: ['STRONG_RECOMMEND', 'RECOMMEND', 'CONSIDER', 'REJECT'],
+      description: 'Hiring recommendation enum.',
+    },
+    strengths: { type: 'array', items: { type: 'string' }, description: 'Evidence-based strengths from the CV against the JD.' },
+    weaknesses: { type: 'array', items: { type: 'string' }, description: 'Evidence-based limitations or concerns.' },
+    missingSkills: { type: 'array', items: { type: 'string' }, description: 'Required or important skills not found in the CV.' },
+    explanation: { type: 'string', description: 'Concise, transparent explanation of the score and recommendation.' },
+  },
+  required: ['overallScore', 'skillScore', 'educationScore', 'experienceScore', 'recommendation', 'strengths', 'weaknesses', 'missingSkills', 'explanation'],
+} as const;
+
 export interface ParsedCv {
   firstName?: string;
   lastName?: string;
@@ -98,11 +135,11 @@ export class AiService implements OnModuleInit {
     const geminiApiKey = this.config.get<string>('ai.geminiApiKey');
 
     if (nodeEnv === 'production' && (provider !== 'gemini' || !geminiApiKey)) {
-      throw new Error('Production requires AI_PROVIDER=gemini and GEMINI_API_KEY for real CV extraction');
+      throw new Error('Production requires AI_PROVIDER=gemini and GEMINI_API_KEY for real AI extraction and screening');
     }
 
     if (provider !== 'gemini') {
-      this.logger.warn('AI_PROVIDER is not gemini; CV extraction is using the local mock parser');
+      this.logger.warn('AI_PROVIDER is not gemini; CV extraction, screening and embeddings are using local mock providers');
     }
   }
 
@@ -190,6 +227,82 @@ export class AiService implements OnModuleInit {
   }
 
   async screenCandidate(input: ScreeningInput) {
+    if (this.config.get<string>('ai.provider') === 'gemini') {
+      return this.screenCandidateWithGemini(input);
+    }
+    return this.screenCandidateWithMock(input);
+  }
+
+  private async screenCandidateWithGemini(input: ScreeningInput) {
+    const apiKey = this.config.get<string>('ai.geminiApiKey');
+    if (!apiKey) throw new Error('GEMINI_API_KEY is required when AI_PROVIDER=gemini');
+
+    const endpoint = this.config.get<string>('ai.geminiEndpoint', 'https://generativelanguage.googleapis.com/v1beta');
+    const model = this.config.get<string>('ai.geminiModel', 'gemini-3.1-flash-lite');
+    const response = await fetch(`${endpoint}/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: this.buildScreeningPrompt(input) }] }],
+        generationConfig: {
+          temperature: 0.15,
+          responseMimeType: 'application/json',
+          responseSchema: screeningResultJsonSchema,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Gemini candidate screening failed with ${response.status}: ${errorText.slice(0, 500)}`);
+    }
+
+    const payload = await response.json() as any;
+    const text = payload?.candidates?.[0]?.content?.parts?.map((part: any) => part.text).filter(Boolean).join('\n');
+    if (!text) throw new Error('Gemini candidate screening returned no text content');
+
+    const parsedJson = JSON.parse(text);
+    return screeningResultSchema.parse(parsedJson);
+  }
+
+  private buildScreeningPrompt(input: ScreeningInput) {
+    return [
+      'You are an HR candidate screening engine.',
+      'Compare the extracted CV data with the job description and position skill requirements.',
+      'Return only JSON matching the provided schema. Do not include markdown.',
+      'Use only evidence present in the extracted CV and JD. Do not invent candidate facts.',
+      'Scores must be percentages from 0 to 100.',
+      'Recommendation must be one of STRONG_RECOMMEND, RECOMMEND, CONSIDER, REJECT.',
+      '',
+      'Scoring guidance:',
+      '- skillScore: coverage, relevance, required level, and evidence for required/preferred skills.',
+      '- experienceScore: years and relevance of experience compared with the JD.',
+      '- educationScore: education fit compared with the JD, without over-penalizing if not required.',
+      '- overallScore: balanced fit for the role, prioritizing skills and relevant experience.',
+      '',
+      'Extracted CV JSON:',
+      JSON.stringify(input.parsedCv).slice(0, 30000),
+      '',
+      'Job description JSON:',
+      JSON.stringify(input.jd ?? {}).slice(0, 12000),
+      '',
+      'Position skills JSON:',
+      JSON.stringify((input.positionSkills ?? []).map((positionSkill) => ({
+        name: positionSkill.skill.name,
+        aliases: positionSkill.skill.aliases,
+        requiredLevel: positionSkill.requiredLevel,
+        minimumLevel: positionSkill.minimumLevel,
+        weight: positionSkill.weight,
+        isRequired: positionSkill.isRequired,
+        notes: positionSkill.notes,
+      }))).slice(0, 12000),
+    ].join('\n');
+  }
+
+  private async screenCandidateWithMock(input: ScreeningInput) {
     const requiredSkills = input.positionSkills?.map((ps) => ps.skill.name) ?? [];
     const candidateSkills = input.parsedCv.skills.map((s) => s.toLowerCase());
     const matched = requiredSkills.filter((s) => candidateSkills.some((cs) => cs.includes(s.toLowerCase()) || s.toLowerCase().includes(cs)));

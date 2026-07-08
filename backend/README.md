@@ -57,9 +57,9 @@ GEMINI_MODEL=gemini-3.1-flash-lite
 GEMINI_EMBEDDING_MODEL=gemini-embedding-2
 ```
 
-`GEMINI_MODEL` can be omitted if you want to use the code default. If `GEMINI_API_KEY` is set and `AI_PROVIDER` is omitted, the backend automatically uses Gemini. Without a key, it falls back to the mock parser.
+`GEMINI_MODEL` can be omitted if you want to use the code default. If `GEMINI_API_KEY` is set and `AI_PROVIDER` is omitted, the backend automatically uses Gemini. Without a key, it falls back to local mock providers for development.
 
-For production, the backend requires `AI_PROVIDER=gemini` and `GEMINI_API_KEY`; startup fails if production is configured to use the mock parser.
+For production, the backend requires `AI_PROVIDER=gemini` and `GEMINI_API_KEY`; startup fails if production is configured to use mock AI providers.
 
 Restart the backend after changing `.env`.
 
@@ -76,4 +76,4 @@ Restart the backend after changing `.env`.
 
 ## Deployment Notes
 
-`parseCv` and candidate embeddings support Gemini through `GEMINI_API_KEY`. `screenCandidate` and `generateInterviewQuestions` still use local/mock logic so the project can run without extra API keys.
+`parseCv`, `screenCandidate`, and candidate embeddings use Gemini through `GEMINI_API_KEY` when `AI_PROVIDER=gemini`. Interview question generation still uses local heuristic logic.

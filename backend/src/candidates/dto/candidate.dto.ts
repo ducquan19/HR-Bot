@@ -3,14 +3,17 @@ import { Transform } from 'class-transformer';
 import { ApplicationStage } from '@prisma/client';
 
 export class UploadCandidateDto {
+  @IsOptional()
   @IsString()
-  firstName!: string;
+  firstName?: string;
 
+  @IsOptional()
   @IsString()
-  lastName!: string;
+  lastName?: string;
 
+  @IsOptional()
   @IsEmail()
-  email!: string;
+  email?: string;
 
   @IsOptional()
   @IsString()
