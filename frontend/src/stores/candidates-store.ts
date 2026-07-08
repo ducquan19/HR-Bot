@@ -14,7 +14,7 @@ interface CandidatesState {
   uploadCandidate: (formData: FormData) => Promise<Candidate>
   scoreCandidates: (candidateIds?: string[], campaignId?: string) => Promise<void>
   updateCandidate: (id: string, candidate: Partial<Candidate>) => Promise<void>
-  deleteCandidate: (id: string) => void
+  deleteCandidate: (id: string) => Promise<void>
   
   setSelectedCandidates: (ids: string[]) => void
   toggleCandidateSelection: (id: string) => void
@@ -94,10 +94,19 @@ export const useCandidatesStore = create<CandidatesState>((set, get) => ({
     }
   },
 
-  deleteCandidate: (id) => {
+  deleteCandidate: async (id) => {
+    const previousCandidates = get().candidates
+    const previousSelected = get().selectedCandidates
     set((state) => ({
       candidates: state.candidates.filter((c) => c.id !== id),
+      selectedCandidates: state.selectedCandidates.filter((candidateId) => candidateId !== id),
     }))
+    try {
+      await api.candidates.remove(id)
+    } catch (error) {
+      set({ candidates: previousCandidates, selectedCandidates: previousSelected })
+      throw error
+    }
   },
 
   setSelectedCandidates: (ids) => {
