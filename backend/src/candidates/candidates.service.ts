@@ -1,23 +1,27 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import crypto from 'crypto';
-import { ApplicationStage, CampaignMemberRole, UserRole } from '@prisma/client';
+import { ApplicationStage, CampaignMemberRole, CampaignPositionStatus, CampaignStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../files/storage.service';
 import { CV_QUEUE } from '../queue/queue.module';
-import { AiService } from '../ai/ai.service';
-import { CandidateQueryDto, ScoreCandidatesDto, UploadCandidateDto } from './dto/candidate.dto';
-import { buildCandidateReportPdf, pdfHeading, pdfSection, pdfWrapped } from './candidate-report-pdf';
+import { CandidateScreeningService } from '../ai/candidate-screening.service';
+import { SearchService } from '../search/search.service';
+import { CandidateQueryDto, CandidateSearchDto, ScoreCandidatesDto, UploadCandidateDto } from './dto/candidate.dto';
+import { buildCandidateReportPdf, pdfBullets, pdfField, pdfHeading, pdfParagraph, pdfSection } from './candidate-report-pdf';
 
 type CandidateUser = { id: string; role: string };
 
 @Injectable()
 export class CandidatesService {
+  private readonly logger = new Logger(CandidatesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
-    private readonly ai: AiService,
+    private readonly screening: CandidateScreeningService,
+    private readonly searchService: SearchService,
     @InjectQueue(CV_QUEUE) private readonly cvQueue: Queue,
   ) {}
 
@@ -54,6 +58,84 @@ export class CandidatesService {
     return profiles.map((profile) => this.toFrontendCandidate(profile));
   }
 
+  async search(dto: CandidateSearchDto) {
+    const limit = Math.min(Math.max(dto.limit ?? 50, 1), 100);
+    if (dto.mode === 'semantic') {
+      return this.searchService.semanticCandidates(dto.query ?? '', limit);
+    }
+
+    const where: any = {};
+    const and: any[] = [];
+
+    if (dto.name?.trim()) {
+      const name = dto.name.trim();
+      and.push({
+        OR: [
+          { firstName: { contains: name, mode: 'insensitive' } },
+          { lastName: { contains: name, mode: 'insensitive' } },
+          { email: { contains: name, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    if (dto.education?.trim()) {
+      const education = dto.education.trim();
+      and.push({
+        education: {
+          some: {
+            OR: [
+              { school: { contains: education, mode: 'insensitive' } },
+              { degree: { contains: education, mode: 'insensitive' } },
+              { field: { contains: education, mode: 'insensitive' } },
+            ],
+          },
+        },
+      });
+    }
+
+    const skillTerms = this.uniqueStrings([...(dto.skills ?? []), dto.skill].filter(Boolean) as string[]);
+    if (skillTerms.length) {
+      if (dto.skillOperator === 'and') {
+        and.push(...skillTerms.map((skill) => ({
+          skills: { some: { skill: { name: { contains: skill, mode: 'insensitive' } } } },
+        })));
+      } else {
+        and.push({
+          OR: skillTerms.map((skill) => ({
+            skills: { some: { skill: { name: { contains: skill, mode: 'insensitive' } } } },
+          })),
+        });
+      }
+    }
+
+    if (dto.stage || dto.scoreMin !== undefined || dto.scoreMax !== undefined) {
+      const applicationFilter: any = {};
+      if (dto.stage) applicationFilter.currentStage = dto.stage;
+      if (dto.scoreMin !== undefined || dto.scoreMax !== undefined) {
+        applicationFilter.screeningResult = {
+          overallScore: {
+            gte: dto.scoreMin !== undefined ? this.toScorePercent(dto.scoreMin) : undefined,
+            lte: dto.scoreMax !== undefined ? this.toScorePercent(dto.scoreMax) : undefined,
+          },
+        };
+      }
+      and.push({ applications: { some: applicationFilter } });
+    }
+
+    if (and.length) where.AND = and;
+
+    const profiles = await this.prisma.candidateProfile.findMany({
+      where,
+      include: this.includeCandidate(),
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    return profiles
+      .map((profile) => this.toFrontendCandidate(profile))
+      .filter((candidate) => this.matchesExperience(candidate.experience, dto.experienceMin, dto.experienceMax));
+  }
+
   async findOne(user: CandidateUser, id: string) {
     const profile = await this.prisma.candidateProfile.findUnique({ where: { id }, include: this.includeCandidate() });
     if (!profile) throw new NotFoundException('Candidate not found');
@@ -77,7 +159,7 @@ export class CandidatesService {
     const key = `cvs/${new Date().getFullYear()}/${checksum}-${file.originalname}`;
     await this.storage.uploadBuffer(key, file.buffer, file.mimetype);
 
-    const candidate = await this.upsertCandidate(dto);
+    const candidate = await this.upsertCandidate(dto, checksum, file.originalname, Boolean(user));
     const cv = await this.prisma.cv.create({
       data: {
         candidateProfileId: candidate.id,
@@ -100,7 +182,7 @@ export class CandidatesService {
     }
 
     await this.prisma.fileProcessingJob.create({ data: { cvId: cv.id, type: 'CV_PARSE_AND_SCREEN', status: 'QUEUED' } });
-    await this.cvQueue.add('parse-and-screen', { cvId: cv.id, bufferBase64: file.buffer.toString('base64'), mimeType: file.mimetype }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 } });
+    await this.cvQueue.add('parse-and-screen', { cvId: cv.id, storagePath: key, mimeType: file.mimetype }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 } });
 
     if (!user) {
       return this.toFrontendCandidate(await this.prisma.candidateProfile.findUniqueOrThrow({ where: { id: candidate.id }, include: this.includeCandidate() }), true);
@@ -120,6 +202,53 @@ export class CandidatesService {
     return this.findOne(user, candidateId);
   }
 
+  async remove(user: CandidateUser, candidateId: string) {
+    const profile = await this.prisma.candidateProfile.findUnique({
+      where: { id: candidateId },
+      include: {
+        cvs: { select: { id: true, storagePath: true, uploadedById: true } },
+        applications: {
+          include: {
+            campaignPosition: {
+              include: {
+                campaign: { include: { members: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!profile) throw new NotFoundException('Candidate not found');
+    this.ensureCanDeleteCandidate(user, profile);
+
+    const storagePaths = profile.cvs.map((cv) => cv.storagePath).filter(Boolean);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.candidateProfile.delete({ where: { id: candidateId } });
+      await tx.activityLog.create({
+        data: {
+          action: 'CANDIDATE_DELETED',
+          entityType: 'candidate',
+          entityId: candidateId,
+          metadata: {
+            email: profile.email,
+            cvIds: profile.cvs.map((cv) => cv.id),
+            applicationIds: profile.applications.map((app) => app.id),
+          },
+        },
+      });
+    });
+
+    await Promise.all(storagePaths.map(async (storagePath) => {
+      try {
+        await this.storage.deleteObject(storagePath);
+      } catch (error) {
+        this.logger.warn(`Could not delete CV object ${storagePath}: ${(error as Error).message}`);
+      }
+    }));
+
+    return { id: candidateId };
+  }
+
   async score(user: CandidateUser, dto: ScoreCandidatesDto) {
     const where: any = {};
     if (dto.candidateIds?.length) where.candidateProfileId = { in: dto.candidateIds };
@@ -135,18 +264,16 @@ export class CandidatesService {
     }
     const applications = await this.prisma.candidateApplication.findMany({
       where,
-      include: {
-        cv: { include: { aiExtractions: { orderBy: { createdAt: 'desc' }, take: 1 } } },
-        campaignPosition: { include: { position: { include: { jobDescription: true, positionSkills: { include: { skill: true } } } } } },
-      },
+      select: { id: true },
     });
 
     const results = [];
     for (const app of applications) {
-      const parsed = app.cv.aiExtractions[0]?.parsedJson as any;
-      if (!parsed) continue;
-      const result = await this.ai.screenCandidate({ parsedCv: parsed, jd: app.campaignPosition.position.jobDescription, positionSkills: app.campaignPosition.position.positionSkills });
-      results.push(await this.prisma.screeningResult.upsert({ where: { applicationId: app.id }, create: { applicationId: app.id, ...result }, update: result }));
+      try {
+        results.push(await this.screening.screenApplication(app.id));
+      } catch (error) {
+        if (!String((error as Error).message).includes('no parsed CV extraction')) throw error;
+      }
     }
     return { count: results.length, results };
   }
@@ -155,6 +282,20 @@ export class CandidatesService {
     await this.findOne(user, candidateId);
     const cv = await this.prisma.cv.findFirstOrThrow({ where: { id: cvId, candidateProfileId: candidateId } });
     return { url: await this.storage.getSignedDownloadUrl(cv.storagePath) };
+  }
+
+  async getLatestCvDownloadUrl(user: CandidateUser, candidateId: string) {
+    await this.findOne(user, candidateId);
+    const cv = await this.prisma.cv.findFirst({
+      where: { candidateProfileId: candidateId },
+      orderBy: { createdAt: 'desc' },
+      select: { storagePath: true, originalFilename: true },
+    });
+    if (!cv) throw new NotFoundException('CV not found');
+    return {
+      url: await this.storage.getSignedDownloadUrl(cv.storagePath),
+      filename: cv.originalFilename,
+    };
   }
 
   async generateReportPdf(user: CandidateUser, candidateId: string) {
@@ -189,46 +330,49 @@ export class CandidatesService {
     const interview = app?.interviewSessions[0];
     const skills = profile.skills.map((item) => item.skill.name);
     const education = profile.education.map((item) => [item.degree, item.school].filter(Boolean).join(' - '));
-    const experiences = profile.experiences.map((item) => [item.title, item.company, item.years ? `${item.years} years` : undefined].filter(Boolean).join(' - '));
+    const experiences = profile.experiences.map((item) => [item.title, item.company, item.years ? this.formatExperienceDuration(item.years) : undefined].filter(Boolean).join(' - '));
     const name = `${profile.firstName} ${profile.lastName}`;
+    const interviewQuestions = interview?.questions?.map((question: any) => (
+      `Q${question.order}: ${question.question} Answer: ${question.answer?.answer ?? 'No answer'}`
+    )) ?? [];
 
     const lines = [
       pdfHeading('HR Bot Candidate Evaluation Report'),
-      ...pdfWrapped(`Candidate: ${name}`),
-      ...pdfWrapped(`Email: ${profile.email}`),
-      ...pdfWrapped(`Phone: ${profile.phone ?? 'N/A'}`),
-      ...pdfWrapped(`Generated at: ${new Date().toISOString()}`),
+      ...pdfField('Candidate', name),
+      ...pdfField('Email', profile.email),
+      ...pdfField('Phone', profile.phone ?? 'N/A'),
+      ...pdfField('Generated at', new Date().toISOString()),
       pdfSection('Application'),
-      ...pdfWrapped(`Campaign: ${app?.campaignPosition.campaign.title ?? 'N/A'}`),
-      ...pdfWrapped(`Position: ${app?.campaignPosition.position.title ?? 'N/A'}`),
-      ...pdfWrapped(`Stage: ${app?.currentStage ?? 'N/A'}`),
-      ...pdfWrapped(`Applied at: ${app?.appliedAt?.toISOString() ?? 'N/A'}`),
+      ...pdfField('Campaign', app?.campaignPosition.campaign.title ?? 'N/A'),
+      ...pdfField('Position', app?.campaignPosition.position.title ?? 'N/A'),
+      ...pdfField('Stage', app?.currentStage ?? 'N/A'),
+      ...pdfField('Applied at', app?.appliedAt?.toISOString() ?? 'N/A'),
       pdfSection('Profile Summary'),
-      ...pdfWrapped(parsed?.summary ?? extraction?.summary ?? 'No CV summary has been extracted yet.'),
+      ...pdfParagraph(parsed?.summary ?? extraction?.summary ?? 'No CV summary has been extracted yet.'),
       pdfSection('Skills'),
-      ...pdfWrapped(skills.length ? skills.join(', ') : 'No skills recorded.'),
+      ...pdfBullets(skills, 'No skills recorded.'),
       pdfSection('Education'),
-      ...pdfWrapped(education.length ? education.join('; ') : 'No education recorded.'),
+      ...pdfBullets(education, 'No education recorded.'),
       pdfSection('Experience'),
-      ...pdfWrapped(experiences.length ? experiences.join('; ') : `${parsed?.experienceYears ?? 0} years from CV extraction.`),
+      ...pdfBullets(experiences.length ? experiences : [`${this.formatExperienceDuration(parsed?.experienceYears ?? 0)} from CV extraction.`], 'No experience recorded.'),
       pdfSection('AI Screening'),
-      ...pdfWrapped(`Overall score: ${screening ? Math.round(screening.overallScore) : 'N/A'}%`),
-      ...pdfWrapped(`Skill score: ${screening ? Math.round(screening.skillScore) : 'N/A'}%`),
-      ...pdfWrapped(`Education score: ${screening ? Math.round(screening.educationScore) : 'N/A'}%`),
-      ...pdfWrapped(`Experience score: ${screening ? Math.round(screening.experienceScore) : 'N/A'}%`),
-      ...pdfWrapped(`Recommendation: ${screening?.recommendation ?? 'N/A'}`),
-      ...pdfWrapped(screening?.explanation ?? 'No AI screening explanation has been generated yet.'),
-      ...pdfWrapped(screening?.strengths?.length ? screening.strengths.join('; ') : 'No strengths recorded.', 'Strengths: '),
-      ...pdfWrapped(screening?.weaknesses?.length ? screening.weaknesses.join('; ') : 'No weaknesses recorded.', 'Weaknesses: '),
-      ...pdfWrapped(screening?.missingSkills?.length ? screening.missingSkills.join(', ') : 'No missing skills recorded.', 'Missing skills: '),
+      ...pdfField('Overall score', screening ? `${Math.round(screening.overallScore)}%` : 'N/A'),
+      ...pdfField('Skill score', screening ? `${Math.round(screening.skillScore)}%` : 'N/A'),
+      ...pdfField('Education score', screening ? `${Math.round(screening.educationScore)}%` : 'N/A'),
+      ...pdfField('Experience score', screening ? `${Math.round(screening.experienceScore)}%` : 'N/A'),
+      ...pdfField('Recommendation', screening?.recommendation ?? 'N/A'),
+      pdfSection('AI Explanation'),
+      ...pdfParagraph(screening?.explanation ?? 'No AI screening explanation has been generated yet.'),
+      pdfSection('Strengths'),
+      ...pdfBullets(screening?.strengths ?? [], 'No strengths recorded.'),
+      pdfSection('Weaknesses'),
+      ...pdfBullets(screening?.weaknesses ?? [], 'No weaknesses recorded.'),
+      pdfSection('Missing Skills'),
+      ...pdfBullets(screening?.missingSkills ?? [], 'No missing skills recorded.'),
       pdfSection('Latest Virtual Interview'),
-      ...pdfWrapped(`Status: ${interview?.status ?? 'N/A'}`),
-      ...pdfWrapped(`Scheduled at: ${interview?.scheduledAt?.toISOString() ?? 'N/A'}`),
-      ...pdfWrapped(
-        interview?.questions?.length
-          ? interview.questions.map((question: any) => `Q${question.order}: ${question.question} Answer: ${question.answer?.answer ?? 'No answer'}`).join(' | ')
-          : 'No virtual interview answers recorded.',
-      ),
+      ...pdfField('Status', interview?.status ?? 'N/A'),
+      ...pdfField('Scheduled at', interview?.scheduledAt?.toISOString() ?? 'N/A'),
+      ...pdfBullets(interviewQuestions, 'No virtual interview answers recorded.'),
     ];
 
     return {
@@ -237,19 +381,31 @@ export class CandidatesService {
     };
   }
 
-  private async upsertCandidate(dto: UploadCandidateDto) {
-    const existing = await this.prisma.candidateProfile.findFirst({ where: { email: dto.email.toLowerCase() } });
+  private async upsertCandidate(dto: UploadCandidateDto, checksum: string, originalFilename: string, isInternalUpload: boolean) {
+    if (!isInternalUpload && (!dto.firstName || !dto.lastName || !dto.email)) {
+      throw new BadRequestException('firstName, lastName and email are required');
+    }
+
+    const email = dto.email?.trim().toLowerCase() || `candidate-${checksum.slice(0, 16)}@upload.hrbot.local`;
+    const existing = await this.prisma.candidateProfile.findFirst({ where: { email } });
     if (existing) {
       return this.prisma.candidateProfile.update({
         where: { id: existing.id },
-        data: { firstName: dto.firstName, lastName: dto.lastName, phone: dto.phone, github: dto.github, portfolio: dto.portfolio },
+        data: {
+          firstName: dto.firstName?.trim() || existing.firstName,
+          lastName: dto.lastName?.trim() || existing.lastName,
+          phone: dto.phone,
+          github: dto.github,
+          portfolio: dto.portfolio,
+        },
       });
     }
+    const fallbackName = this.filenameToCandidateName(originalFilename);
     return this.prisma.candidateProfile.create({
       data: {
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        email: dto.email.toLowerCase(),
+        firstName: dto.firstName?.trim() || fallbackName.firstName,
+        lastName: dto.lastName?.trim() || fallbackName.lastName,
+        email,
         phone: dto.phone,
         github: dto.github,
         portfolio: dto.portfolio,
@@ -257,11 +413,42 @@ export class CandidatesService {
     });
   }
 
+  private filenameToCandidateName(filename: string) {
+    const baseName = filename
+      .replace(/\.[^.]+$/, '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!baseName) return { firstName: 'Pending', lastName: 'Candidate' };
+    const [firstName, ...rest] = baseName.split(' ');
+    return {
+      firstName: firstName || 'Pending',
+      lastName: rest.join(' ') || 'Candidate',
+    };
+  }
+
   private async resolveCampaignPosition(dto: UploadCandidateDto) {
-    if (dto.campaignPositionId) return dto.campaignPositionId;
+    if (dto.campaignPositionId) {
+      const campaignPosition = await this.prisma.campaignPosition.findUnique({
+        where: { id: dto.campaignPositionId },
+        include: { campaign: true },
+      });
+      if (!campaignPosition) throw new NotFoundException('Campaign position not found');
+      if (campaignPosition.status !== CampaignPositionStatus.OPEN || campaignPosition.campaign.status !== CampaignStatus.ACTIVE) {
+        throw new BadRequestException('Campaign is not active or has no open positions');
+      }
+      return campaignPosition.id;
+    }
     if (!dto.campaignId) return undefined;
-    const cp = await this.prisma.campaignPosition.findFirst({ where: { campaignId: dto.campaignId, status: 'OPEN' } });
-    return cp?.id;
+    const cp = await this.prisma.campaignPosition.findFirst({
+      where: {
+        campaignId: dto.campaignId,
+        status: CampaignPositionStatus.OPEN,
+        campaign: { status: CampaignStatus.ACTIVE },
+      },
+    });
+    if (!cp) throw new BadRequestException('Campaign is not active or has no open positions');
+    return cp.id;
   }
 
   private isSupportedCvFile(file: Express.Multer.File) {
@@ -282,6 +469,40 @@ export class CandidatesService {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '') || 'candidate';
+  }
+
+  private toScorePercent(value: number) {
+    return value <= 1 ? value * 100 : value;
+  }
+
+  private uniqueStrings(values: string[]) {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const value of values) {
+      const cleaned = value.trim();
+      const key = cleaned.toLowerCase();
+      if (!cleaned || seen.has(key)) continue;
+      seen.add(key);
+      result.push(cleaned);
+    }
+    return result;
+  }
+
+  private matchesExperience(experience: number, min?: number, max?: number) {
+    if (min !== undefined && experience < min) return false;
+    if (max !== undefined && experience > max) return false;
+    return true;
+  }
+
+  private formatExperienceDuration(years?: number) {
+    if (!years || Number.isNaN(years) || years <= 0) return '0 months';
+    const totalMonths = Math.round(years * 12);
+    const wholeYears = Math.floor(totalMonths / 12);
+    const months = totalMonths % 12;
+    const parts = [];
+    if (wholeYears) parts.push(`${wholeYears} ${wholeYears === 1 ? 'year' : 'years'}`);
+    if (months) parts.push(`${months} ${months === 1 ? 'month' : 'months'}`);
+    return parts.join(' ') || '0 months';
   }
 
   private includeCandidate() {
@@ -344,6 +565,20 @@ export class CandidatesService {
     }
   }
 
+  private ensureCanDeleteCandidate(user: CandidateUser, profile: any) {
+    if (this.isAdmin(user)) return;
+    const uploadedByUser = profile.cvs?.some((cv: any) => cv.uploadedById === user.id);
+    const campaignEditor = profile.applications?.some((app: any) => {
+      const campaign = app.campaignPosition?.campaign;
+      return campaign?.createdById === user.id || campaign?.members?.some((member: any) => (
+        member.userId === user.id && [CampaignMemberRole.OWNER, CampaignMemberRole.EDITOR].includes(member.role)
+      ));
+    });
+    if (!uploadedByUser && !campaignEditor) {
+      throw new ForbiddenException('You do not have permission to delete this candidate');
+    }
+  }
+
   private async ensureCanEditCampaignPosition(user: CandidateUser, campaignPositionId: string) {
     const campaignPosition = await this.prisma.campaignPosition.findUnique({
       where: { id: campaignPositionId },
@@ -379,6 +614,8 @@ export class CandidatesService {
       email: profile.email,
       phone: profile.phone ?? '',
       cvUrl: cv ? `/api/candidates/${profile.id}/cv/${cv.id}/download` : '',
+      cvProcessingStatus: cv?.processingStatus?.toLowerCase(),
+      cvProcessingError: cv?.processingError,
       stage: (app?.currentStage ?? 'APPLIED').toLowerCase(),
       score,
       skills: profile.skills?.map((s: any) => s.skill.name) ?? [],

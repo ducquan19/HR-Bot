@@ -22,8 +22,8 @@ export function Modal({ isOpen, onClose, title, children, footer, className }: M
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div
           className={cn(
-            'relative bg-card text-card-foreground rounded-lg shadow-lg max-w-lg w-full mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden',
-            className
+            'relative bg-card text-card-foreground rounded-lg shadow-lg w-full mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden',
+            className ?? 'max-w-lg'
           )}
           onClick={(e) => e.stopPropagation()}
         >

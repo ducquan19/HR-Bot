@@ -9,7 +9,7 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/lib/api'
 import type { PublicApplicationForm } from '@/types'
-import { Briefcase, CheckCircle2, Upload } from 'lucide-react'
+import { Briefcase, CheckCircle2, ChevronDown, Upload } from 'lucide-react'
 
 export function PublicApplicationFormPage() {
   const { token = '' } = useParams()
@@ -18,6 +18,7 @@ export function PublicApplicationFormPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [expandedPositions, setExpandedPositions] = useState<Record<string, boolean>>({})
   const [candidate, setCandidate] = useState({
     firstName: '',
     lastName: '',
@@ -35,6 +36,7 @@ export function PublicApplicationFormPage() {
       .then((data) => {
         setForm(data)
         setCandidate((current) => ({ ...current, campaignPositionId: data.positions[0]?.id ?? '' }))
+        setExpandedPositions(data.positions.reduce((acc, position, index) => ({ ...acc, [position.id]: index === 0 }), {}))
         setError('')
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Application form is not available'))
@@ -67,6 +69,10 @@ export function PublicApplicationFormPage() {
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const togglePosition = (positionId: string) => {
+    setExpandedPositions((current) => ({ ...current, [positionId]: !current[positionId] }))
   }
 
   if (isLoading) {
@@ -116,22 +122,55 @@ export function PublicApplicationFormPage() {
           {form?.positions.map((position) => (
             <Card key={position.id}>
               <CardHeader>
-                <CardTitle>{position.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {position.overview && <p className="text-sm text-muted-foreground">{position.overview}</p>}
-                {position.requirements && (
+                <button type="button" className="flex w-full items-start justify-between gap-3 text-left" onClick={() => togglePosition(position.id)}>
                   <div>
-                    <h2 className="text-sm font-semibold mb-2">Requirements</h2>
-                    <p className="text-sm whitespace-pre-wrap">{position.requirements}</p>
+                    <CardTitle>{position.title}</CardTitle>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {position.department && <Badge variant="secondary">{position.department}</Badge>}
+                      {position.seniority && <Badge variant="secondary">{position.seniority}</Badge>}
+                      {position.employmentType && <Badge variant="secondary">{position.employmentType}</Badge>}
+                      <Badge variant="secondary">{position.vacancies} vacancies</Badge>
+                    </div>
                   </div>
-                )}
-                {position.skills.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {position.skills.map((skill) => <Badge key={skill} variant="secondary">{skill}</Badge>)}
-                  </div>
-                )}
-              </CardContent>
+                  <ChevronDown className={`mt-1 h-5 w-5 flex-shrink-0 transition-transform ${expandedPositions[position.id] ? 'rotate-180' : ''}`} />
+                </button>
+              </CardHeader>
+              {expandedPositions[position.id] && (
+                <CardContent className="space-y-4">
+                  {position.overview && (
+                    <div>
+                      <h2 className="text-sm font-semibold mb-2">Overview</h2>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{position.overview}</p>
+                    </div>
+                  )}
+                  {position.responsibilities && (
+                    <div>
+                      <h2 className="text-sm font-semibold mb-2">Responsibilities</h2>
+                      <p className="text-sm whitespace-pre-wrap">{position.responsibilities}</p>
+                    </div>
+                  )}
+                  {position.requirements && (
+                    <div>
+                      <h2 className="text-sm font-semibold mb-2">Requirements</h2>
+                      <p className="text-sm whitespace-pre-wrap">{position.requirements}</p>
+                    </div>
+                  )}
+                  {position.benefits && (
+                    <div>
+                      <h2 className="text-sm font-semibold mb-2">Benefits</h2>
+                      <p className="text-sm whitespace-pre-wrap">{position.benefits}</p>
+                    </div>
+                  )}
+                  {position.skills.length > 0 && (
+                    <div>
+                      <h2 className="text-sm font-semibold mb-2">Skills</h2>
+                      <div className="flex flex-wrap gap-2">
+                        {position.skills.map((skill) => <Badge key={skill} variant="secondary">{skill}</Badge>)}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              )}
             </Card>
           ))}
         </div>

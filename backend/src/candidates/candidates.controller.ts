@@ -1,11 +1,11 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CandidatesService } from './candidates.service';
-import { CandidateQueryDto, ScoreCandidatesDto, UpdateCandidateStageDto, UploadCandidateDto } from './dto/candidate.dto';
+import { CandidateQueryDto, CandidateSearchDto, ScoreCandidatesDto, UpdateCandidateStageDto, UploadCandidateDto } from './dto/candidate.dto';
 
 @ApiTags('Candidates')
 @Controller('candidates')
@@ -16,6 +16,12 @@ export class CandidatesController {
   @Get()
   findAll(@CurrentUser() user: { id: string; role: string }, @Query() query: CandidateQueryDto) {
     return this.candidates.findAll(user, query);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('search')
+  search(@Body() dto: CandidateSearchDto) {
+    return this.candidates.search(dto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -54,6 +60,12 @@ export class CandidatesController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Delete(':id')
+  remove(@CurrentUser() user: { id: string; role: string }, @Param('id') id: string) {
+    return this.candidates.remove(user, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post('score')
   score(@CurrentUser() user: { id: string; role: string }, @Body() dto: ScoreCandidatesDto) {
     return this.candidates.score(user, dto);
@@ -63,5 +75,11 @@ export class CandidatesController {
   @Get(':candidateId/cv/:cvId/download')
   async downloadCv(@CurrentUser() user: { id: string; role: string }, @Param('candidateId') candidateId: string, @Param('cvId') cvId: string) {
     return this.candidates.getCvDownloadUrl(user, candidateId, cvId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/cv/download')
+  async downloadLatestCv(@CurrentUser() user: { id: string; role: string }, @Param('id') id: string) {
+    return this.candidates.getLatestCvDownloadUrl(user, id);
   }
 }

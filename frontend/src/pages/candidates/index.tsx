@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -10,45 +10,49 @@ import { useCandidatesStore } from '@/stores/candidates-store'
 import { useCampaignsStore } from '@/stores/campaigns-store'
 import { CANDIDATE_STAGES, CANDIDATE_STAGE_COLORS, COMMON_SKILLS } from '@/constants'
 import { api } from '@/lib/api'
-import { formatDate, getInitials } from '@/lib/utils'
-import { Download, Filter, Search, Upload, Zap, Eye, Phone, Mail } from 'lucide-react'
-import type { Candidate, SemanticCandidateResult } from '@/types'
+import { formatDate, formatExperienceDuration, getInitials } from '@/lib/utils'
+import { Check, Download, Search, Upload, Eye, Mail, Trash2 } from 'lucide-react'
+import type { Candidate, CandidateSearchMode, SemanticCandidateResult } from '@/types'
 
 export function CandidatesPage() {
   const {
     candidates,
-    selectedCandidates,
-    filters,
-    toggleCandidateSelection,
-    setFilters,
     loadCandidates,
     uploadCandidate,
-    scoreCandidates,
     updateCandidate,
+    deleteCandidate,
     isLoading,
   } = useCandidatesStore()
   const { campaigns, loadCampaigns } = useCampaignsStore()
 
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchMode, setSearchMode] = useState<CandidateSearchMode>('criteria')
+  const [searchResults, setSearchResults] = useState<SemanticCandidateResult[] | null>(null)
   const [semanticQuery, setSemanticQuery] = useState('')
-  const [semanticResults, setSemanticResults] = useState<SemanticCandidateResult[] | null>(null)
-  const [isSemanticSearching, setIsSemanticSearching] = useState(false)
-  const [selectedStage, setSelectedStage] = useState('')
-  const [selectedSkill, setSelectedSkill] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [isSkillDropdownOpen, setIsSkillDropdownOpen] = useState(false)
+  const skillDropdownRef = useRef<HTMLDivElement>(null)
+  const [criteriaForm, setCriteriaForm] = useState({
+    name: '',
+    education: '',
+    skills: [] as string[],
+    skillOperator: 'or' as 'and' | 'or',
+    stage: '',
+    experienceMin: '',
+    experienceMax: '',
+    scoreMin: '',
+    scoreMax: '',
+  })
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null)
   const [detailCandidate, setDetailCandidate] = useState<Candidate | null>(null)
   const [isDetailLoading, setIsDetailLoading] = useState(false)
   const [isReportDownloading, setIsReportDownloading] = useState(false)
-  const [showScoreModal, setShowScoreModal] = useState(false)
+  const [isCvDownloading, setIsCvDownloading] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
-  const [showMoreFilters, setShowMoreFilters] = useState(false)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState('')
   const [uploadForm, setUploadForm] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
     campaignId: '',
     file: null as File | null,
   })
@@ -58,91 +62,60 @@ export function CandidatesPage() {
     loadCampaigns().catch(() => undefined)
   }, [loadCandidates, loadCampaigns])
 
-  const filteredCandidates = useMemo(() => {
-    const base = candidates.filter((candidate) => {
-      if (filters.search) {
-        const search = filters.search.toLowerCase()
-        if (
-          !candidate.firstName.toLowerCase().includes(search) &&
-          !candidate.lastName.toLowerCase().includes(search) &&
-          !candidate.email.toLowerCase().includes(search)
-        ) {
-          return false
-        }
-      }
-      if (filters.stage && candidate.stage !== filters.stage) return false
-      if (filters.skills?.length) {
-        const hasSkill = filters.skills.some((skill) =>
-          candidate.skills.some((candidateSkill) => candidateSkill.toLowerCase().includes(skill.toLowerCase()))
-        )
-        if (!hasSkill) return false
-      }
-      if (filters.scoreMin !== undefined && (candidate.score ?? 0) < filters.scoreMin) return false
-      if (filters.scoreMax !== undefined && (candidate.score ?? 0) > filters.scoreMax) return false
+  useEffect(() => {
+    const hasProcessingCandidates = candidates.some((candidate) => isCandidateProcessing(candidate))
+    if (!hasProcessingCandidates) return
 
-      const search = searchTerm.toLowerCase()
-      if (
-        search &&
-        !candidate.firstName.toLowerCase().includes(search) &&
-        !candidate.lastName.toLowerCase().includes(search) &&
-        !candidate.email.toLowerCase().includes(search)
-      ) {
-        return false
-      }
-      if (selectedStage && candidate.stage !== selectedStage) return false
-      if (selectedSkill && !candidate.skills.some((skill) => skill.toLowerCase().includes(selectedSkill.toLowerCase()))) return false
-      return true
-    })
-    if (!semanticResults) return base
+    const interval = window.setInterval(() => {
+      loadCandidates().catch(() => undefined)
+    }, 3000)
+    return () => window.clearInterval(interval)
+  }, [candidates, loadCandidates])
 
-    const resultIds = new Set(semanticResults.map((result) => result.id))
-    const order = new Map(semanticResults.map((result, index) => [result.id, index]))
-    return base
-      .filter((candidate) => resultIds.has(candidate.id))
-      .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
-  }, [candidates, filters, searchTerm, selectedStage, selectedSkill, semanticResults])
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!skillDropdownRef.current?.contains(event.target as Node)) {
+        setIsSkillDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [])
+
+  const displayedCandidates = searchResults ?? candidates
+  const uploadableCampaigns = campaigns.filter((campaign) => campaign.status === 'active')
 
   const semanticById = useMemo(() => {
-    return new Map((semanticResults ?? []).map((result) => [result.id, result]))
-  }, [semanticResults])
+    if (searchMode !== 'semantic') return new Map()
+    return new Map((searchResults ?? []).map((result) => [result.id, result]))
+  }, [searchMode, searchResults])
 
   const handleMoveStage = async (candidateId: string, newStage: string) => {
     try {
       await updateCandidate(candidateId, { stage: newStage as any })
+      setSearchResults((results) => results?.map((candidate) => (
+        candidate.id === candidateId ? { ...candidate, stage: newStage as any } : candidate
+      )) ?? null)
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update candidate stage')
     }
   }
 
-  const handleScoreAll = async () => {
-    try {
-      const candidateIds = selectedCandidates.length > 0 ? selectedCandidates : filteredCandidates.map((candidate) => candidate.id)
-      await scoreCandidates(candidateIds)
-      setShowScoreModal(false)
-      setError('')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not score candidates')
-    }
-  }
-
   const handleUpload = async () => {
-    if (!uploadForm.firstName || !uploadForm.lastName || !uploadForm.email || !uploadForm.file) {
-      alert('Please fill in candidate information and choose a CV')
+    if (!uploadForm.campaignId || !uploadForm.file) {
+      alert('Please choose a campaign and CV file')
       return
     }
 
     const formData = new FormData()
-    formData.set('firstName', uploadForm.firstName)
-    formData.set('lastName', uploadForm.lastName)
-    formData.set('email', uploadForm.email)
-    formData.set('phone', uploadForm.phone)
-    if (uploadForm.campaignId) formData.set('campaignId', uploadForm.campaignId)
+    formData.set('campaignId', uploadForm.campaignId)
     formData.set('cv', uploadForm.file)
 
     try {
       await uploadCandidate(formData)
-      setUploadForm({ firstName: '', lastName: '', email: '', phone: '', campaignId: '', file: null })
+      setUploadForm({ campaignId: '', file: null })
       setShowUploadModal(false)
       setError('')
     } catch (err) {
@@ -151,30 +124,67 @@ export function CandidatesPage() {
   }
 
   const handleClearFilters = () => {
-    setSearchTerm('')
     setSemanticQuery('')
-    setSemanticResults(null)
-    setSelectedStage('')
-    setSelectedSkill('')
-    setFilters({})
+    setSearchResults(null)
+    setCriteriaForm({
+      name: '',
+      education: '',
+      skills: [],
+      skillOperator: 'or',
+      stage: '',
+      experienceMin: '',
+      experienceMax: '',
+      scoreMin: '',
+      scoreMax: '',
+    })
+  }
+
+  const toOptionalNumber = (value: string) => {
+    const trimmed = value.trim()
+    return trimmed ? Number(trimmed) : undefined
+  }
+
+  const handleCriteriaSearch = async () => {
+    setIsSearching(true)
+    try {
+      const results = await api.candidates.search({
+        mode: 'criteria',
+        name: criteriaForm.name.trim() || undefined,
+        education: criteriaForm.education.trim() || undefined,
+        skills: criteriaForm.skills.length ? criteriaForm.skills : undefined,
+        skillOperator: criteriaForm.skillOperator,
+        stage: criteriaForm.stage ? criteriaForm.stage.toUpperCase() : undefined,
+        experienceMin: toOptionalNumber(criteriaForm.experienceMin),
+        experienceMax: toOptionalNumber(criteriaForm.experienceMax),
+        scoreMin: toOptionalNumber(criteriaForm.scoreMin),
+        scoreMax: toOptionalNumber(criteriaForm.scoreMax),
+        limit: 100,
+      })
+      setSearchResults(results)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not search candidates')
+    } finally {
+      setIsSearching(false)
+    }
   }
 
   const handleSemanticSearch = async () => {
     const query = semanticQuery.trim()
     if (!query) {
-      setSemanticResults(null)
+      setSearchResults(null)
       return
     }
 
-    setIsSemanticSearching(true)
+    setIsSearching(true)
     try {
-      const results = await api.search.candidates(query, 30)
-      setSemanticResults(results)
+      const results = await api.candidates.search({ mode: 'semantic', query, limit: 30 })
+      setSearchResults(results)
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not search candidates')
     } finally {
-      setIsSemanticSearching(false)
+      setIsSearching(false)
     }
   }
 
@@ -208,15 +218,122 @@ export function CandidatesPage() {
     }
   }
 
+  const handleDownloadCv = async () => {
+    if (!selectedDetail) return
+    setIsCvDownloading(true)
+    try {
+      const name = `${selectedDetail.firstName}-${selectedDetail.lastName}`.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      await api.candidates.downloadCv(selectedDetail.id, `${name || 'candidate'}-cv`)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not download candidate CV')
+    } finally {
+      setIsCvDownloading(false)
+    }
+  }
+
+  const handleDeleteCandidate = async () => {
+    if (!deleteTargetId) return
+    setIsDeleting(true)
+    try {
+      await deleteCandidate(deleteTargetId)
+      setSearchResults((results) => results?.filter((candidate) => candidate.id !== deleteTargetId) ?? null)
+      if (selectedCandidate === deleteTargetId) {
+        setSelectedCandidate(null)
+        setDetailCandidate(null)
+        setShowDetailModal(false)
+      }
+      setDeleteTargetId(null)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete candidate')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const selectedDetail = detailCandidate ?? candidates.find((candidate) => candidate.id === selectedCandidate)
+    ?? searchResults?.find((candidate) => candidate.id === selectedCandidate)
+  const deleteTarget = candidates.find((candidate) => candidate.id === deleteTargetId)
+    ?? searchResults?.find((candidate) => candidate.id === deleteTargetId)
+    ?? (selectedDetail?.id === deleteTargetId ? selectedDetail : undefined)
   const extractedInfo = selectedDetail?.extractedInfo ?? {}
   const extractedSummary = typeof extractedInfo.summary === 'string' ? extractedInfo.summary : ''
   const extractedProjects = Array.isArray(extractedInfo.projects) ? extractedInfo.projects : []
+  const getProjectTitle = (project: any, index: number) => {
+    if (typeof project === 'string') return project
+    if (typeof project?.name === 'string' && project.name.trim()) return project.name
+    return `Project ${index + 1}`
+  }
+  const getProjectDescription = (project: any) => {
+    if (typeof project === 'string') return ''
+    return typeof project?.description === 'string' ? project.description : ''
+  }
   const aiScore = selectedDetail?.screeningResult?.overallScore ?? (selectedDetail?.score !== undefined ? selectedDetail.score * 100 : undefined)
+  const isPlaceholderEmail = (email?: string) => email?.endsWith('@upload.hrbot.local') ?? false
+  const isCandidateProcessing = (candidate: Candidate) => (
+    candidate.cvProcessingStatus === 'uploaded' ||
+    candidate.cvProcessingStatus === 'queued' ||
+    candidate.cvProcessingStatus === 'parsing' ||
+    candidate.cvProcessingStatus === 'screening'
+  )
+  const getProcessingLabel = (candidate: Candidate) => {
+    if (candidate.cvProcessingStatus === 'queued' || candidate.cvProcessingStatus === 'uploaded') return 'Waiting to process CV'
+    if (candidate.cvProcessingStatus === 'parsing') return 'Parsing CV with AI'
+    if (candidate.cvProcessingStatus === 'screening') return 'Scoring with AI'
+    if (candidate.cvProcessingStatus === 'failed') return 'CV processing failed'
+    return 'Processing CV'
+  }
+  const renderCandidateContact = (candidate: Candidate) => {
+    if (isCandidateProcessing(candidate)) {
+      return (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          <span>{getProcessingLabel(candidate)}</span>
+        </div>
+      )
+    }
+
+    if (candidate.cvProcessingStatus === 'failed') {
+      return <span className="text-red-600">{getProcessingLabel(candidate)}</span>
+    }
+
+    if (isPlaceholderEmail(candidate.email)) {
+      return <span className="text-muted-foreground">Email not found in CV</span>
+    }
+
+    return (
+      <a href={`mailto:${candidate.email}`} className="flex items-center gap-1 hover:text-foreground">
+        <Mail className="w-3 h-3" />
+        {candidate.email}
+      </a>
+    )
+  }
   const renderDetailList = (items?: string[]) => (
     items?.length ? (
       <div className="flex flex-wrap gap-2">
         {items.map((item) => <Badge key={item} variant="secondary">{item}</Badge>)}
+      </div>
+    ) : (
+      <p className="text-sm text-muted-foreground">No data yet</p>
+    )
+  )
+  const renderInsightList = (items?: string[]) => (
+    items?.length ? (
+      <div className="space-y-2">
+        {items.map((item) => {
+          const isLong = item.length > 48
+          return (
+            <div
+              key={item}
+              className={`break-words bg-muted px-3 py-2 text-sm text-muted-foreground ${
+                isLong ? 'rounded-md leading-relaxed' : 'inline-block rounded-full'
+              }`}
+            >
+              {item}
+            </div>
+          )
+        })}
       </div>
     ) : (
       <p className="text-sm text-muted-foreground">No data yet</p>
@@ -231,10 +348,6 @@ export function CandidatesPage() {
           <p className="text-muted-foreground">Review and manage candidate profiles</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={() => setShowScoreModal(true)}>
-            <Zap className="w-4 h-4" />
-            Score All
-          </Button>
           <Button className="gap-2" onClick={() => setShowUploadModal(true)}>
             <Upload className="w-4 h-4" />
             Upload CV
@@ -250,78 +363,178 @@ export function CandidatesPage() {
 
       <Card className="mb-8">
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search candidates..."
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select
-              options={[
-                { value: '', label: 'All Stages' },
-                ...Object.entries(CANDIDATE_STAGES).map(([key, value]) => ({ value: key, label: value })),
-              ]}
-              value={selectedStage}
-              onChange={(event) => setSelectedStage(event.target.value)}
-            />
-            <Select
-              options={[
-                { value: '', label: 'All Skills' },
-                ...COMMON_SKILLS.map((skill) => ({ value: skill, label: skill })),
-              ]}
-              value={selectedSkill}
-              onChange={(event) => setSelectedSkill(event.target.value)}
-            />
-            <Button variant="outline" className="gap-2" onClick={() => setShowMoreFilters((value) => !value)}>
-              <Filter className="w-4 h-4" />
-              More Filters
-            </Button>
+          <div className="mb-4 flex w-fit rounded-md border border-border p-1">
+            {[
+              { id: 'criteria', label: 'Criteria' },
+              { id: 'semantic', label: 'Semantic' },
+            ].map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => setSearchMode(mode.id as CandidateSearchMode)}
+                className={`rounded px-4 py-2 text-sm font-medium transition-colors ${
+                  searchMode === mode.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {mode.label}
+              </button>
+            ))}
           </div>
-          {showMoreFilters && (
-            <div className="mt-4 space-y-4">
+
+          {searchMode === 'criteria' ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <Input
+                  label="Name or Email"
+                  placeholder="Jane Nguyen"
+                  value={criteriaForm.name}
+                  onChange={(event) => setCriteriaForm({ ...criteriaForm, name: event.target.value })}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') handleCriteriaSearch()
+                  }}
+                />
+                <Input
+                  label="Education"
+                  placeholder="Computer Science"
+                  value={criteriaForm.education}
+                  onChange={(event) => setCriteriaForm({ ...criteriaForm, education: event.target.value })}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') handleCriteriaSearch()
+                  }}
+                />
+                <div className="relative w-full" ref={skillDropdownRef}>
+                  <div className="mb-2 flex h-5 items-start justify-between gap-2">
+                    <label className="text-sm font-medium text-foreground">Skill</label>
+                    <div className="-mt-1 flex rounded-md border border-border p-0.5">
+                      {[
+                        { id: 'or', label: 'OR' },
+                        { id: 'and', label: 'AND' },
+                      ].map((operator) => (
+                        <button
+                          key={operator.id}
+                          type="button"
+                          onClick={() => setCriteriaForm({ ...criteriaForm, skillOperator: operator.id as 'and' | 'or' })}
+                          className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                            criteriaForm.skillOperator === operator.id
+                              ? 'bg-primary text-primary-foreground'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {operator.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsSkillDropdownOpen((open) => !open)}
+                    className="flex h-10 w-full items-center rounded-md border border-input bg-background px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span className={`block w-full overflow-x-auto whitespace-nowrap ${criteriaForm.skills.length ? 'text-foreground' : 'text-muted-foreground'}`}>
+                      {criteriaForm.skills.length ? criteriaForm.skills.join(', ') : 'Any Skill'}
+                    </span>
+                  </button>
+                  {isSkillDropdownOpen && (
+                    <div className="absolute z-20 mt-2 max-h-64 w-full overflow-y-auto rounded-md border border-border bg-background p-1 shadow-lg">
+                      {COMMON_SKILLS.map((skill) => {
+                        const isSelected = criteriaForm.skills.includes(skill)
+                        return (
+                          <button
+                            key={skill}
+                            type="button"
+                            onClick={() => {
+                              const skills = isSelected
+                                ? criteriaForm.skills.filter((item) => item !== skill)
+                                : [...criteriaForm.skills, skill]
+                              setCriteriaForm({ ...criteriaForm, skills })
+                            }}
+                            className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm hover:bg-muted"
+                          >
+                            <span>{skill}</span>
+                            {isSelected && <Check className="h-4 w-4 text-primary" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+                <Select
+                  label="Stage"
+                  options={[
+                    { value: '', label: 'Any Stage' },
+                    ...Object.entries(CANDIDATE_STAGES).map(([key, value]) => ({ value: key, label: value })),
+                  ]}
+                  value={criteriaForm.stage}
+                  onChange={(event) => setCriteriaForm({ ...criteriaForm, stage: event.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <Input
+                  label="Experience Min (Years)"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={criteriaForm.experienceMin}
+                  onChange={(event) => setCriteriaForm({ ...criteriaForm, experienceMin: event.target.value })}
+                />
+                <Input
+                  label="Experience Max (Years)"
+                  type="number"
+                  min="0"
+                  placeholder="10"
+                  value={criteriaForm.experienceMax}
+                  onChange={(event) => setCriteriaForm({ ...criteriaForm, experienceMax: event.target.value })}
+                />
+                <Input
+                  label="Score Min"
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="70"
+                  value={criteriaForm.scoreMin}
+                  onChange={(event) => setCriteriaForm({ ...criteriaForm, scoreMin: event.target.value })}
+                />
+                <Input
+                  label="Score Max"
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="100"
+                  value={criteriaForm.scoreMax}
+                  onChange={(event) => setCriteriaForm({ ...criteriaForm, scoreMax: event.target.value })}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={handleClearFilters}>
+                  Clear
+                </Button>
+                <Button onClick={handleCriteriaSearch} isLoading={isSearching} className="gap-2">
+                  <Search className="w-4 h-4" />
+                  Search
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
               <div className="flex flex-col gap-2 md:flex-row">
                 <Input
-                  placeholder="Semantic search, e.g. React intern with PostgreSQL experience"
+                  placeholder="React intern with PostgreSQL experience"
                   value={semanticQuery}
                   onChange={(event) => setSemanticQuery(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') handleSemanticSearch()
                   }}
                 />
-                <Button variant="outline" onClick={handleSemanticSearch} isLoading={isSemanticSearching} className="gap-2 md:w-44">
+                <Button onClick={handleSemanticSearch} isLoading={isSearching} className="gap-2 md:w-44">
                   <Search className="w-4 h-4" />
-                  Semantic Search
+                  Search
                 </Button>
               </div>
-              {semanticResults && (
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-muted-foreground">
-                    Ranked {semanticResults.length} candidates by semantic match
-                  </p>
-                  <Button variant="ghost" onClick={() => setSemanticResults(null)}>
-                    Clear Semantic
-                  </Button>
-                </div>
-              )}
               <div className="flex justify-end">
                 <Button variant="ghost" onClick={handleClearFilters}>
-                  Clear Filters
+                  Clear
                 </Button>
               </div>
-            </div>
-          )}
-          {!showMoreFilters && semanticResults && (
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">
-                Semantic ranking active for "{semanticQuery}"
-              </p>
-              <Button variant="ghost" onClick={handleClearFilters}>
-                Clear Search
-              </Button>
             </div>
           )}
         </CardContent>
@@ -329,36 +542,33 @@ export function CandidatesPage() {
 
       <div className="mb-4">
         <p className="text-sm text-muted-foreground">
-          Showing {filteredCandidates.length} of {candidates.length} candidates
-          {selectedCandidates.length > 0 && ` • ${selectedCandidates.length} selected`}
-          {semanticResults && ` • semantic ranked`}
+          {searchResults
+            ? `Showing ${displayedCandidates.length} ${searchMode} result${displayedCandidates.length === 1 ? '' : 's'}`
+            : `Showing ${displayedCandidates.length} candidates`}
+          {searchResults && searchMode === 'semantic' && ` - ranked by semantic match`}
         </p>
       </div>
 
       <div className="space-y-3">
-        {isLoading ? (
+        {isLoading && !searchResults ? (
           <Card>
             <CardContent className="py-12 text-center">
               <p className="text-muted-foreground">Loading candidates...</p>
             </CardContent>
           </Card>
-        ) : filteredCandidates.length === 0 ? (
+        ) : displayedCandidates.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">No candidates found matching your filters.</p>
+              <p className="text-muted-foreground">
+                {searchResults ? 'No candidates matched this search.' : 'No candidates available.'}
+              </p>
             </CardContent>
           </Card>
         ) : (
-          filteredCandidates.map((candidate) => (
+          displayedCandidates.map((candidate) => (
             <Card key={candidate.id} className="hover:shadow-md transition-shadow">
               <CardContent className="py-4 px-6">
                 <div className="flex items-center gap-4">
-                  <input
-                    type="checkbox"
-                    checked={selectedCandidates.includes(candidate.id)}
-                    onChange={() => toggleCandidateSelection(candidate.id)}
-                    className="w-4 h-4 rounded"
-                  />
                   <div className="w-10 h-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0">
                     {getInitials(candidate.firstName, candidate.lastName)}
                   </div>
@@ -370,7 +580,7 @@ export function CandidatesPage() {
                       <Badge className={CANDIDATE_STAGE_COLORS[candidate.stage]}>
                         {CANDIDATE_STAGES[candidate.stage]}
                       </Badge>
-                      {semanticResults && (
+                      {searchResults && searchMode === 'semantic' && (
                         <Badge variant="secondary">
                           {semanticById.get(candidate.id)?.similarity != null
                             ? `${Math.round((semanticById.get(candidate.id)?.similarity ?? 0) * 100)}% match`
@@ -379,16 +589,7 @@ export function CandidatesPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <a href={`mailto:${candidate.email}`} className="flex items-center gap-1 hover:text-foreground">
-                        <Mail className="w-3 h-3" />
-                        {candidate.email}
-                      </a>
-                      {candidate.phone && (
-                        <a href={`tel:${candidate.phone}`} className="flex items-center gap-1 hover:text-foreground">
-                          <Phone className="w-3 h-3" />
-                          {candidate.phone}
-                        </a>
-                      )}
+                      {renderCandidateContact(candidate)}
                     </div>
                   </div>
                   <div className="flex items-center gap-6">
@@ -398,18 +599,6 @@ export function CandidatesPage() {
                         <div className="h-full bg-primary transition-all" style={{ width: `${(candidate.score || 0) * 100}%` }} />
                       </div>
                     </div>
-                    <div className="flex gap-1 flex-wrap max-w-xs justify-end">
-                      {candidate.skills.slice(0, 2).map((skill) => (
-                        <Badge key={skill} variant="secondary" className="text-xs">
-                          {skill}
-                        </Badge>
-                      ))}
-                      {candidate.skills.length > 2 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{candidate.skills.length - 2}
-                        </Badge>
-                      )}
-                    </div>
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
@@ -418,6 +607,15 @@ export function CandidatesPage() {
                         className="gap-1"
                       >
                         <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteTargetId(candidate.id)}
+                        className="text-red-600 hover:text-red-700"
+                        aria-label={`Delete ${candidate.firstName} ${candidate.lastName}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
                       </Button>
                       <Select
                         options={Object.entries(CANDIDATE_STAGES).map(([key, value]) => ({ value: key, label: value }))}
@@ -440,14 +638,22 @@ export function CandidatesPage() {
           setDetailCandidate(null)
         }}
         title={selectedDetail ? `${selectedDetail.firstName} ${selectedDetail.lastName}` : 'Candidate Details'}
-        className="max-w-4xl max-h-[90vh] overflow-y-auto"
+        className="w-[min(50rem,calc(100vw-2rem))] max-w-[50rem] max-h-[90vh] overflow-y-auto"
       >
         {isDetailLoading && (
           <p className="text-sm text-muted-foreground">Loading candidate details...</p>
         )}
         {!isDetailLoading && selectedDetail && (
           <div className="space-y-4">
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setDeleteTargetId(selectedDetail.id)} className="gap-2 text-red-600 hover:text-red-700">
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownloadCv} isLoading={isCvDownloading} className="gap-2">
+                <Download className="w-4 h-4" />
+                Download CV
+              </Button>
               <Button variant="outline" size="sm" onClick={handleDownloadReport} isLoading={isReportDownloading} className="gap-2">
                 <Download className="w-4 h-4" />
                 Export PDF
@@ -489,7 +695,7 @@ export function CandidatesPage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Experience</p>
-                <p className="font-medium">{selectedDetail.experience} years</p>
+                <p className="font-medium">{formatExperienceDuration(selectedDetail.experience)}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">GPA</p>
@@ -506,17 +712,21 @@ export function CandidatesPage() {
             </div>
             {(extractedSummary || extractedProjects.length > 0) && (
               <div className="rounded-md border border-border p-4">
-                <p className="text-sm font-medium mb-2">Extracted CV Profile</p>
+                <p className="text-sm font-medium mb-2">Overview</p>
                 {extractedSummary && <p className="text-sm text-muted-foreground mb-3">{extractedSummary}</p>}
                 {extractedProjects.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs uppercase text-muted-foreground">Projects</p>
-                    {extractedProjects.slice(0, 3).map((project: any, index: number) => (
-                      <div key={`${project.name ?? 'project'}-${index}`} className="rounded-md bg-muted p-3">
-                        <p className="text-sm font-medium">{project.name ?? `Project ${index + 1}`}</p>
-                        {project.description && <p className="text-sm text-muted-foreground">{project.description}</p>}
-                      </div>
-                    ))}
+                    {extractedProjects.slice(0, 6).map((project: any, index: number) => {
+                      const title = getProjectTitle(project, index)
+                      const description = getProjectDescription(project)
+                      return (
+                        <div key={`${title}-${index}`} className="rounded-md bg-muted p-3">
+                          <p className="text-sm font-medium">{title}</p>
+                          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -542,11 +752,11 @@ export function CandidatesPage() {
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div>
                     <p className="text-xs uppercase text-muted-foreground mb-2">Strengths</p>
-                    {renderDetailList(selectedDetail.screeningResult.strengths)}
+                    {renderInsightList(selectedDetail.screeningResult.strengths)}
                   </div>
                   <div>
                     <p className="text-xs uppercase text-muted-foreground mb-2">Weaknesses</p>
-                    {renderDetailList(selectedDetail.screeningResult.weaknesses)}
+                    {renderInsightList(selectedDetail.screeningResult.weaknesses)}
                   </div>
                   <div>
                     <p className="text-xs uppercase text-muted-foreground mb-2">Missing Skills</p>
@@ -560,21 +770,23 @@ export function CandidatesPage() {
       </Modal>
 
       <Modal
-        isOpen={showScoreModal}
-        onClose={() => setShowScoreModal(false)}
-        title="Score Candidates with AI"
+        isOpen={Boolean(deleteTargetId)}
+        onClose={() => {
+          if (!isDeleting) setDeleteTargetId(null)
+        }}
+        title="Delete Candidate"
         footer={
           <>
-            <Button variant="outline" onClick={() => setShowScoreModal(false)}>Cancel</Button>
-            <Button onClick={handleScoreAll} isLoading={isLoading} className="gap-2">
-              <Zap className="w-4 h-4" />
-              Score Now
+            <Button variant="outline" onClick={() => setDeleteTargetId(null)} disabled={isDeleting}>Cancel</Button>
+            <Button variant="danger" onClick={handleDeleteCandidate} isLoading={isDeleting} className="gap-2">
+              <Trash2 className="w-4 h-4" />
+              Delete
             </Button>
           </>
         }
       >
         <p className="text-sm text-muted-foreground">
-          This will use AI to score {selectedCandidates.length || filteredCandidates.length} candidate(s) based on available CV and campaign data.
+          Delete {deleteTarget ? `${deleteTarget.firstName} ${deleteTarget.lastName}` : 'this candidate'} and all related CV, application, screening, and interview data?
         </p>
       </Modal>
 
@@ -590,15 +802,9 @@ export function CandidatesPage() {
         }
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="First Name" value={uploadForm.firstName} onChange={(event) => setUploadForm({ ...uploadForm, firstName: event.target.value })} />
-            <Input label="Last Name" value={uploadForm.lastName} onChange={(event) => setUploadForm({ ...uploadForm, lastName: event.target.value })} />
-          </div>
-          <Input label="Email" type="email" value={uploadForm.email} onChange={(event) => setUploadForm({ ...uploadForm, email: event.target.value })} />
-          <Input label="Phone" value={uploadForm.phone} onChange={(event) => setUploadForm({ ...uploadForm, phone: event.target.value })} />
           <Select
             label="Campaign"
-            options={[{ value: '', label: 'No campaign' }, ...campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))]}
+            options={[{ value: '', label: 'Select campaign' }, ...uploadableCampaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))]}
             value={uploadForm.campaignId}
             onChange={(event) => setUploadForm({ ...uploadForm, campaignId: event.target.value })}
           />

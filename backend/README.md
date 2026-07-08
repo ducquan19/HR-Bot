@@ -1,17 +1,17 @@
-# HR Bot Backend (NestJS)
+﻿# HR Bot Backend (NestJS)
 
-Backend này được thiết kế theo kiến trúc module hóa cho frontend React/Vite hiện tại của repo. API trả về wrapper `{ success, data }` và shape dữ liệu tương thích với `src/types/index.ts` của frontend.
+NestJS backend for the HR Bot React/Vite app. API responses use the `{ success, data }` wrapper expected by the frontend types.
 
-## Tech stack
+## Tech Stack
 
 - NestJS REST API + WebSocket Gateway
 - PostgreSQL + Prisma ORM + JSONB + pgvector extension
-- Redis + BullMQ cho xử lý CV bất đồng bộ
-- MinIO/S3 cho lưu file CV gốc
-- Mock AI provider có thể thay bằng OpenAI/Gemini
-- Nodemailer/MailHog cho email reset password và interview invite
+- Redis + BullMQ for asynchronous CV processing
+- MinIO/S3-compatible storage for original CV files
+- Gemini CV extraction with mock fallback for local development
+- Nodemailer/MailHog for password reset and interview invite emails
 
-## Chạy local
+## Run Local
 
 ```bash
 cd backend
@@ -22,19 +22,48 @@ cd backend
 npm install
 npx prisma generate
 npx prisma migrate dev
-psql "$DATABASE_URL" -f prisma/sql/pgvector.sql  # optional, for semantic search
 npm run prisma:seed
 npm run start:dev
 ```
 
-API chạy tại `http://localhost:3000/api`.
+The API runs at `http://localhost:3000/api`.
+The migrations create the pgvector extension and `candidate_embeddings` table used by semantic search.
 
-Tài khoản seed:
+Seed accounts:
 
 - `admin@hrbot.com` / `password`
 - `recruiter@hrbot.com` / `password`
 
-## Các endpoint chính
+## Gemini API Key For CV Extraction
+
+By default the backend can run with:
+
+```env
+AI_PROVIDER=mock
+```
+
+To let the CV worker send raw CV text to Gemini and receive real structured JSON extraction, create a free API key in Google AI Studio:
+
+```text
+https://aistudio.google.com/app/apikey
+```
+
+Then update `backend/.env`:
+
+```env
+AI_PROVIDER=gemini
+GEMINI_API_KEY=your_google_ai_studio_api_key
+GEMINI_MODEL=gemini-3.1-flash-lite
+GEMINI_EMBEDDING_MODEL=gemini-embedding-2
+```
+
+`GEMINI_MODEL` can be omitted if you want to use the code default. If `GEMINI_API_KEY` is set and `AI_PROVIDER` is omitted, the backend automatically uses Gemini. Without a key, it falls back to local mock providers for development.
+
+For production, the backend requires `AI_PROVIDER=gemini` and `GEMINI_API_KEY`; startup fails if production is configured to use mock AI providers.
+
+Restart the backend after changing `.env`.
+
+## Main Endpoints
 
 - `POST /api/auth/login`, `POST /api/auth/register`, `GET /api/auth/me`
 - `GET/POST/PATCH/DELETE /api/campaigns`
@@ -45,6 +74,6 @@ Tài khoản seed:
 - `GET /api/dashboard/summary`
 - `GET /api/search/candidates?q=...`
 
-## Lưu ý triển khai
+## Deployment Notes
 
-AI provider hiện tại là mock để project chạy được không cần API key. Khi triển khai thật, thay logic trong `src/ai/ai.service.ts` bằng OpenAI/Gemini và giữ nguyên interface `parseCv`, `screenCandidate`, `generateInterviewQuestions`, `embed`.
+`parseCv`, `screenCandidate`, and candidate embeddings use Gemini through `GEMINI_API_KEY` when `AI_PROVIDER=gemini`. Interview question generation still uses local heuristic logic.
