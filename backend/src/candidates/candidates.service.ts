@@ -61,7 +61,7 @@ export class CandidatesService {
   async upload(userId: string | undefined, dto: UploadCandidateDto, file: Express.Multer.File) {
     if (!file) throw new BadRequestException('CV file is required');
     if (file.size > 10 * 1024 * 1024) throw new BadRequestException('CV file size must not exceed 10MB');
-    if (!['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.mimetype)) {
+    if (!this.isSupportedCvFile(file)) {
       throw new BadRequestException('Only PDF and DOCX files are supported');
     }
 
@@ -236,6 +236,17 @@ export class CandidatesService {
     if (!dto.campaignId) return undefined;
     const cp = await this.prisma.campaignPosition.findFirst({ where: { campaignId: dto.campaignId, status: 'OPEN' } });
     return cp?.id;
+  }
+
+  private isSupportedCvFile(file: Express.Multer.File) {
+    const filename = file.originalname.toLowerCase();
+    const supportedMimeTypes = [
+      'application/pdf',
+      'application/x-pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/octet-stream',
+    ];
+    return supportedMimeTypes.includes(file.mimetype) && (filename.endsWith('.pdf') || filename.endsWith('.docx'));
   }
 
   private slugify(value: string) {

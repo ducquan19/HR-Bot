@@ -18,9 +18,9 @@ export function CandidatesPage() {
   const {
     candidates,
     selectedCandidates,
+    filters,
     toggleCandidateSelection,
     setFilters,
-    getFilteredCandidates,
     loadCandidates,
     uploadCandidate,
     scoreCandidates,
@@ -59,7 +59,27 @@ export function CandidatesPage() {
   }, [loadCandidates, loadCampaigns])
 
   const filteredCandidates = useMemo(() => {
-    const base = getFilteredCandidates().filter((candidate) => {
+    const base = candidates.filter((candidate) => {
+      if (filters.search) {
+        const search = filters.search.toLowerCase()
+        if (
+          !candidate.firstName.toLowerCase().includes(search) &&
+          !candidate.lastName.toLowerCase().includes(search) &&
+          !candidate.email.toLowerCase().includes(search)
+        ) {
+          return false
+        }
+      }
+      if (filters.stage && candidate.stage !== filters.stage) return false
+      if (filters.skills?.length) {
+        const hasSkill = filters.skills.some((skill) =>
+          candidate.skills.some((candidateSkill) => candidateSkill.toLowerCase().includes(skill.toLowerCase()))
+        )
+        if (!hasSkill) return false
+      }
+      if (filters.scoreMin !== undefined && (candidate.score ?? 0) < filters.scoreMin) return false
+      if (filters.scoreMax !== undefined && (candidate.score ?? 0) > filters.scoreMax) return false
+
       const search = searchTerm.toLowerCase()
       if (
         search &&
@@ -80,7 +100,7 @@ export function CandidatesPage() {
     return base
       .filter((candidate) => resultIds.has(candidate.id))
       .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
-  }, [getFilteredCandidates, searchTerm, selectedStage, selectedSkill, semanticResults])
+  }, [candidates, filters, searchTerm, selectedStage, selectedSkill, semanticResults])
 
   const semanticById = useMemo(() => {
     return new Map((semanticResults ?? []).map((result) => [result.id, result]))

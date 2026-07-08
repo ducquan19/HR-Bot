@@ -19,7 +19,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   const payload = (await response.json().catch(() => ({}))) as ApiResponse<T>
   if (!response.ok || payload.success === false) {
-    throw new Error(payload.error || `Request failed with status ${response.status}`)
+    const message = Array.isArray((payload as any).message) ? (payload as any).message.join(', ') : (payload as any).message
+    throw new Error(message || payload.error || `Request failed with status ${response.status}`)
   }
   return (payload.data ?? payload) as T
 }

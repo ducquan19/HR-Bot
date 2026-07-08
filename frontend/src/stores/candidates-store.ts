@@ -54,7 +54,8 @@ export const useCandidatesStore = create<CandidatesState>((set, get) => ({
     set({ isLoading: true })
     try {
       const candidate = await api.candidates.upload(formData)
-      set((state) => ({ candidates: [candidate, ...state.candidates], isLoading: false }))
+      const candidates = await api.candidates.list(get().filters)
+      set({ candidates, isLoading: false })
       return candidate
     } catch (error) {
       set({ isLoading: false })
