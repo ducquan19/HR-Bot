@@ -7,7 +7,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../files/storage.service';
 import { CV_QUEUE } from '../queue/queue.module';
 import { AiService } from '../ai/ai.service';
-import { CandidateQueryDto, ScoreCandidatesDto, UploadCandidateDto } from './dto/candidate.dto';
+import { SearchService } from '../search/search.service';
+import { CandidateQueryDto, CandidateSearchDto, ScoreCandidatesDto, UploadCandidateDto } from './dto/candidate.dto';
 import { buildCandidateReportPdf, pdfHeading, pdfSection, pdfWrapped } from './candidate-report-pdf';
 
 type CandidateUser = { id: string; role: string };
@@ -18,6 +19,7 @@ export class CandidatesService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly ai: AiService,
+    private readonly searchService: SearchService,
     @InjectQueue(CV_QUEUE) private readonly cvQueue: Queue,
   ) {}
 
@@ -52,6 +54,84 @@ export class CandidatesService {
       orderBy: { createdAt: 'desc' },
     });
     return profiles.map((profile) => this.toFrontendCandidate(profile));
+  }
+
+  async search(dto: CandidateSearchDto) {
+    const limit = Math.min(Math.max(dto.limit ?? 50, 1), 100);
+    if (dto.mode === 'semantic') {
+      return this.searchService.semanticCandidates(dto.query ?? '', limit);
+    }
+
+    const where: any = {};
+    const and: any[] = [];
+
+    if (dto.name?.trim()) {
+      const name = dto.name.trim();
+      and.push({
+        OR: [
+          { firstName: { contains: name, mode: 'insensitive' } },
+          { lastName: { contains: name, mode: 'insensitive' } },
+          { email: { contains: name, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    if (dto.education?.trim()) {
+      const education = dto.education.trim();
+      and.push({
+        education: {
+          some: {
+            OR: [
+              { school: { contains: education, mode: 'insensitive' } },
+              { degree: { contains: education, mode: 'insensitive' } },
+              { field: { contains: education, mode: 'insensitive' } },
+            ],
+          },
+        },
+      });
+    }
+
+    const skillTerms = this.uniqueStrings([...(dto.skills ?? []), dto.skill].filter(Boolean) as string[]);
+    if (skillTerms.length) {
+      if (dto.skillOperator === 'and') {
+        and.push(...skillTerms.map((skill) => ({
+          skills: { some: { skill: { name: { contains: skill, mode: 'insensitive' } } } },
+        })));
+      } else {
+        and.push({
+          OR: skillTerms.map((skill) => ({
+            skills: { some: { skill: { name: { contains: skill, mode: 'insensitive' } } } },
+          })),
+        });
+      }
+    }
+
+    if (dto.stage || dto.scoreMin !== undefined || dto.scoreMax !== undefined) {
+      const applicationFilter: any = {};
+      if (dto.stage) applicationFilter.currentStage = dto.stage;
+      if (dto.scoreMin !== undefined || dto.scoreMax !== undefined) {
+        applicationFilter.screeningResult = {
+          overallScore: {
+            gte: dto.scoreMin !== undefined ? this.toScorePercent(dto.scoreMin) : undefined,
+            lte: dto.scoreMax !== undefined ? this.toScorePercent(dto.scoreMax) : undefined,
+          },
+        };
+      }
+      and.push({ applications: { some: applicationFilter } });
+    }
+
+    if (and.length) where.AND = and;
+
+    const profiles = await this.prisma.candidateProfile.findMany({
+      where,
+      include: this.includeCandidate(),
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    return profiles
+      .map((profile) => this.toFrontendCandidate(profile))
+      .filter((candidate) => this.matchesExperience(candidate.experience, dto.experienceMin, dto.experienceMax));
   }
 
   async findOne(user: CandidateUser, id: string) {
@@ -100,7 +180,7 @@ export class CandidatesService {
     }
 
     await this.prisma.fileProcessingJob.create({ data: { cvId: cv.id, type: 'CV_PARSE_AND_SCREEN', status: 'QUEUED' } });
-    await this.cvQueue.add('parse-and-screen', { cvId: cv.id, bufferBase64: file.buffer.toString('base64'), mimeType: file.mimetype }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 } });
+    await this.cvQueue.add('parse-and-screen', { cvId: cv.id, storagePath: key, mimeType: file.mimetype }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 } });
 
     if (!user) {
       return this.toFrontendCandidate(await this.prisma.candidateProfile.findUniqueOrThrow({ where: { id: candidate.id }, include: this.includeCandidate() }), true);
@@ -282,6 +362,29 @@ export class CandidatesService {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '') || 'candidate';
+  }
+
+  private toScorePercent(value: number) {
+    return value <= 1 ? value * 100 : value;
+  }
+
+  private uniqueStrings(values: string[]) {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const value of values) {
+      const cleaned = value.trim();
+      const key = cleaned.toLowerCase();
+      if (!cleaned || seen.has(key)) continue;
+      seen.add(key);
+      result.push(cleaned);
+    }
+    return result;
+  }
+
+  private matchesExperience(experience: number, min?: number, max?: number) {
+    if (min !== undefined && experience < min) return false;
+    if (max !== undefined && experience > max) return false;
+    return true;
   }
 
   private includeCandidate() {

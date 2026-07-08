@@ -5,7 +5,7 @@ import { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CandidatesService } from './candidates.service';
-import { CandidateQueryDto, ScoreCandidatesDto, UpdateCandidateStageDto, UploadCandidateDto } from './dto/candidate.dto';
+import { CandidateQueryDto, CandidateSearchDto, ScoreCandidatesDto, UpdateCandidateStageDto, UploadCandidateDto } from './dto/candidate.dto';
 
 @ApiTags('Candidates')
 @Controller('candidates')
@@ -16,6 +16,12 @@ export class CandidatesController {
   @Get()
   findAll(@CurrentUser() user: { id: string; role: string }, @Query() query: CandidateQueryDto) {
     return this.candidates.findAll(user, query);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('search')
+  search(@Body() dto: CandidateSearchDto) {
+    return this.candidates.search(dto);
   }
 
   @UseGuards(JwtAuthGuard)
