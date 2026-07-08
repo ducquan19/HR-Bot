@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -11,16 +11,14 @@ import { useCampaignsStore } from '@/stores/campaigns-store'
 import { CANDIDATE_STAGES, CANDIDATE_STAGE_COLORS, COMMON_SKILLS } from '@/constants'
 import { api } from '@/lib/api'
 import { formatDate, getInitials } from '@/lib/utils'
-import { Download, Filter, Search, Upload, Zap, Eye, Phone, Mail } from 'lucide-react'
-import type { Candidate, SemanticCandidateResult } from '@/types'
+import { Check, Download, Search, Upload, Zap, Eye, Phone, Mail } from 'lucide-react'
+import type { Candidate, CandidateSearchMode, SemanticCandidateResult } from '@/types'
 
 export function CandidatesPage() {
   const {
     candidates,
     selectedCandidates,
-    filters,
     toggleCandidateSelection,
-    setFilters,
     loadCandidates,
     uploadCandidate,
     scoreCandidates,
@@ -29,12 +27,23 @@ export function CandidatesPage() {
   } = useCandidatesStore()
   const { campaigns, loadCampaigns } = useCampaignsStore()
 
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchMode, setSearchMode] = useState<CandidateSearchMode>('criteria')
+  const [searchResults, setSearchResults] = useState<SemanticCandidateResult[] | null>(null)
   const [semanticQuery, setSemanticQuery] = useState('')
-  const [semanticResults, setSemanticResults] = useState<SemanticCandidateResult[] | null>(null)
-  const [isSemanticSearching, setIsSemanticSearching] = useState(false)
-  const [selectedStage, setSelectedStage] = useState('')
-  const [selectedSkill, setSelectedSkill] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [isSkillDropdownOpen, setIsSkillDropdownOpen] = useState(false)
+  const skillDropdownRef = useRef<HTMLDivElement>(null)
+  const [criteriaForm, setCriteriaForm] = useState({
+    name: '',
+    education: '',
+    skills: [] as string[],
+    skillOperator: 'or' as 'and' | 'or',
+    stage: '',
+    experienceMin: '',
+    experienceMax: '',
+    scoreMin: '',
+    scoreMax: '',
+  })
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null)
   const [detailCandidate, setDetailCandidate] = useState<Candidate | null>(null)
@@ -42,7 +51,6 @@ export function CandidatesPage() {
   const [isReportDownloading, setIsReportDownloading] = useState(false)
   const [showScoreModal, setShowScoreModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
-  const [showMoreFilters, setShowMoreFilters] = useState(false)
   const [error, setError] = useState('')
   const [uploadForm, setUploadForm] = useState({
     firstName: '',
@@ -58,57 +66,30 @@ export function CandidatesPage() {
     loadCampaigns().catch(() => undefined)
   }, [loadCandidates, loadCampaigns])
 
-  const filteredCandidates = useMemo(() => {
-    const base = candidates.filter((candidate) => {
-      if (filters.search) {
-        const search = filters.search.toLowerCase()
-        if (
-          !candidate.firstName.toLowerCase().includes(search) &&
-          !candidate.lastName.toLowerCase().includes(search) &&
-          !candidate.email.toLowerCase().includes(search)
-        ) {
-          return false
-        }
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!skillDropdownRef.current?.contains(event.target as Node)) {
+        setIsSkillDropdownOpen(false)
       }
-      if (filters.stage && candidate.stage !== filters.stage) return false
-      if (filters.skills?.length) {
-        const hasSkill = filters.skills.some((skill) =>
-          candidate.skills.some((candidateSkill) => candidateSkill.toLowerCase().includes(skill.toLowerCase()))
-        )
-        if (!hasSkill) return false
-      }
-      if (filters.scoreMin !== undefined && (candidate.score ?? 0) < filters.scoreMin) return false
-      if (filters.scoreMax !== undefined && (candidate.score ?? 0) > filters.scoreMax) return false
+    }
 
-      const search = searchTerm.toLowerCase()
-      if (
-        search &&
-        !candidate.firstName.toLowerCase().includes(search) &&
-        !candidate.lastName.toLowerCase().includes(search) &&
-        !candidate.email.toLowerCase().includes(search)
-      ) {
-        return false
-      }
-      if (selectedStage && candidate.stage !== selectedStage) return false
-      if (selectedSkill && !candidate.skills.some((skill) => skill.toLowerCase().includes(selectedSkill.toLowerCase()))) return false
-      return true
-    })
-    if (!semanticResults) return base
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [])
 
-    const resultIds = new Set(semanticResults.map((result) => result.id))
-    const order = new Map(semanticResults.map((result, index) => [result.id, index]))
-    return base
-      .filter((candidate) => resultIds.has(candidate.id))
-      .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
-  }, [candidates, filters, searchTerm, selectedStage, selectedSkill, semanticResults])
+  const displayedCandidates = searchResults ?? candidates
 
   const semanticById = useMemo(() => {
-    return new Map((semanticResults ?? []).map((result) => [result.id, result]))
-  }, [semanticResults])
+    if (searchMode !== 'semantic') return new Map()
+    return new Map((searchResults ?? []).map((result) => [result.id, result]))
+  }, [searchMode, searchResults])
 
   const handleMoveStage = async (candidateId: string, newStage: string) => {
     try {
       await updateCandidate(candidateId, { stage: newStage as any })
+      setSearchResults((results) => results?.map((candidate) => (
+        candidate.id === candidateId ? { ...candidate, stage: newStage as any } : candidate
+      )) ?? null)
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update candidate stage')
@@ -117,7 +98,7 @@ export function CandidatesPage() {
 
   const handleScoreAll = async () => {
     try {
-      const candidateIds = selectedCandidates.length > 0 ? selectedCandidates : filteredCandidates.map((candidate) => candidate.id)
+      const candidateIds = selectedCandidates.length > 0 ? selectedCandidates : displayedCandidates.map((candidate) => candidate.id)
       await scoreCandidates(candidateIds)
       setShowScoreModal(false)
       setError('')
@@ -151,30 +132,67 @@ export function CandidatesPage() {
   }
 
   const handleClearFilters = () => {
-    setSearchTerm('')
     setSemanticQuery('')
-    setSemanticResults(null)
-    setSelectedStage('')
-    setSelectedSkill('')
-    setFilters({})
+    setSearchResults(null)
+    setCriteriaForm({
+      name: '',
+      education: '',
+      skills: [],
+      skillOperator: 'or',
+      stage: '',
+      experienceMin: '',
+      experienceMax: '',
+      scoreMin: '',
+      scoreMax: '',
+    })
+  }
+
+  const toOptionalNumber = (value: string) => {
+    const trimmed = value.trim()
+    return trimmed ? Number(trimmed) : undefined
+  }
+
+  const handleCriteriaSearch = async () => {
+    setIsSearching(true)
+    try {
+      const results = await api.candidates.search({
+        mode: 'criteria',
+        name: criteriaForm.name.trim() || undefined,
+        education: criteriaForm.education.trim() || undefined,
+        skills: criteriaForm.skills.length ? criteriaForm.skills : undefined,
+        skillOperator: criteriaForm.skillOperator,
+        stage: criteriaForm.stage ? criteriaForm.stage.toUpperCase() : undefined,
+        experienceMin: toOptionalNumber(criteriaForm.experienceMin),
+        experienceMax: toOptionalNumber(criteriaForm.experienceMax),
+        scoreMin: toOptionalNumber(criteriaForm.scoreMin),
+        scoreMax: toOptionalNumber(criteriaForm.scoreMax),
+        limit: 100,
+      })
+      setSearchResults(results)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not search candidates')
+    } finally {
+      setIsSearching(false)
+    }
   }
 
   const handleSemanticSearch = async () => {
     const query = semanticQuery.trim()
     if (!query) {
-      setSemanticResults(null)
+      setSearchResults(null)
       return
     }
 
-    setIsSemanticSearching(true)
+    setIsSearching(true)
     try {
-      const results = await api.search.candidates(query, 30)
-      setSemanticResults(results)
+      const results = await api.candidates.search({ mode: 'semantic', query, limit: 30 })
+      setSearchResults(results)
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not search candidates')
     } finally {
-      setIsSemanticSearching(false)
+      setIsSearching(false)
     }
   }
 
@@ -209,9 +227,19 @@ export function CandidatesPage() {
   }
 
   const selectedDetail = detailCandidate ?? candidates.find((candidate) => candidate.id === selectedCandidate)
+    ?? searchResults?.find((candidate) => candidate.id === selectedCandidate)
   const extractedInfo = selectedDetail?.extractedInfo ?? {}
   const extractedSummary = typeof extractedInfo.summary === 'string' ? extractedInfo.summary : ''
   const extractedProjects = Array.isArray(extractedInfo.projects) ? extractedInfo.projects : []
+  const getProjectTitle = (project: any, index: number) => {
+    if (typeof project === 'string') return project
+    if (typeof project?.name === 'string' && project.name.trim()) return project.name
+    return `Project ${index + 1}`
+  }
+  const getProjectDescription = (project: any) => {
+    if (typeof project === 'string') return ''
+    return typeof project?.description === 'string' ? project.description : ''
+  }
   const aiScore = selectedDetail?.screeningResult?.overallScore ?? (selectedDetail?.score !== undefined ? selectedDetail.score * 100 : undefined)
   const renderDetailList = (items?: string[]) => (
     items?.length ? (
@@ -250,78 +278,178 @@ export function CandidatesPage() {
 
       <Card className="mb-8">
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search candidates..."
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select
-              options={[
-                { value: '', label: 'All Stages' },
-                ...Object.entries(CANDIDATE_STAGES).map(([key, value]) => ({ value: key, label: value })),
-              ]}
-              value={selectedStage}
-              onChange={(event) => setSelectedStage(event.target.value)}
-            />
-            <Select
-              options={[
-                { value: '', label: 'All Skills' },
-                ...COMMON_SKILLS.map((skill) => ({ value: skill, label: skill })),
-              ]}
-              value={selectedSkill}
-              onChange={(event) => setSelectedSkill(event.target.value)}
-            />
-            <Button variant="outline" className="gap-2" onClick={() => setShowMoreFilters((value) => !value)}>
-              <Filter className="w-4 h-4" />
-              More Filters
-            </Button>
+          <div className="mb-4 flex w-fit rounded-md border border-border p-1">
+            {[
+              { id: 'criteria', label: 'Criteria' },
+              { id: 'semantic', label: 'Semantic' },
+            ].map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => setSearchMode(mode.id as CandidateSearchMode)}
+                className={`rounded px-4 py-2 text-sm font-medium transition-colors ${
+                  searchMode === mode.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {mode.label}
+              </button>
+            ))}
           </div>
-          {showMoreFilters && (
-            <div className="mt-4 space-y-4">
+
+          {searchMode === 'criteria' ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <Input
+                  label="Name or Email"
+                  placeholder="Jane Nguyen"
+                  value={criteriaForm.name}
+                  onChange={(event) => setCriteriaForm({ ...criteriaForm, name: event.target.value })}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') handleCriteriaSearch()
+                  }}
+                />
+                <Input
+                  label="Education"
+                  placeholder="Computer Science"
+                  value={criteriaForm.education}
+                  onChange={(event) => setCriteriaForm({ ...criteriaForm, education: event.target.value })}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') handleCriteriaSearch()
+                  }}
+                />
+                <div className="relative w-full" ref={skillDropdownRef}>
+                  <div className="mb-2 flex h-5 items-start justify-between gap-2">
+                    <label className="text-sm font-medium text-foreground">Skill</label>
+                    <div className="-mt-1 flex rounded-md border border-border p-0.5">
+                      {[
+                        { id: 'or', label: 'OR' },
+                        { id: 'and', label: 'AND' },
+                      ].map((operator) => (
+                        <button
+                          key={operator.id}
+                          type="button"
+                          onClick={() => setCriteriaForm({ ...criteriaForm, skillOperator: operator.id as 'and' | 'or' })}
+                          className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                            criteriaForm.skillOperator === operator.id
+                              ? 'bg-primary text-primary-foreground'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {operator.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsSkillDropdownOpen((open) => !open)}
+                    className="flex h-10 w-full items-center rounded-md border border-input bg-background px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span className={`block w-full overflow-x-auto whitespace-nowrap ${criteriaForm.skills.length ? 'text-foreground' : 'text-muted-foreground'}`}>
+                      {criteriaForm.skills.length ? criteriaForm.skills.join(', ') : 'Any Skill'}
+                    </span>
+                  </button>
+                  {isSkillDropdownOpen && (
+                    <div className="absolute z-20 mt-2 max-h-64 w-full overflow-y-auto rounded-md border border-border bg-background p-1 shadow-lg">
+                      {COMMON_SKILLS.map((skill) => {
+                        const isSelected = criteriaForm.skills.includes(skill)
+                        return (
+                          <button
+                            key={skill}
+                            type="button"
+                            onClick={() => {
+                              const skills = isSelected
+                                ? criteriaForm.skills.filter((item) => item !== skill)
+                                : [...criteriaForm.skills, skill]
+                              setCriteriaForm({ ...criteriaForm, skills })
+                            }}
+                            className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm hover:bg-muted"
+                          >
+                            <span>{skill}</span>
+                            {isSelected && <Check className="h-4 w-4 text-primary" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+                <Select
+                  label="Stage"
+                  options={[
+                    { value: '', label: 'Any Stage' },
+                    ...Object.entries(CANDIDATE_STAGES).map(([key, value]) => ({ value: key, label: value })),
+                  ]}
+                  value={criteriaForm.stage}
+                  onChange={(event) => setCriteriaForm({ ...criteriaForm, stage: event.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <Input
+                  label="Experience Min (Years)"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={criteriaForm.experienceMin}
+                  onChange={(event) => setCriteriaForm({ ...criteriaForm, experienceMin: event.target.value })}
+                />
+                <Input
+                  label="Experience Max (Years)"
+                  type="number"
+                  min="0"
+                  placeholder="10"
+                  value={criteriaForm.experienceMax}
+                  onChange={(event) => setCriteriaForm({ ...criteriaForm, experienceMax: event.target.value })}
+                />
+                <Input
+                  label="Score Min"
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="70"
+                  value={criteriaForm.scoreMin}
+                  onChange={(event) => setCriteriaForm({ ...criteriaForm, scoreMin: event.target.value })}
+                />
+                <Input
+                  label="Score Max"
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="100"
+                  value={criteriaForm.scoreMax}
+                  onChange={(event) => setCriteriaForm({ ...criteriaForm, scoreMax: event.target.value })}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={handleClearFilters}>
+                  Clear
+                </Button>
+                <Button onClick={handleCriteriaSearch} isLoading={isSearching} className="gap-2">
+                  <Search className="w-4 h-4" />
+                  Search
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
               <div className="flex flex-col gap-2 md:flex-row">
                 <Input
-                  placeholder="Semantic search, e.g. React intern with PostgreSQL experience"
+                  placeholder="React intern with PostgreSQL experience"
                   value={semanticQuery}
                   onChange={(event) => setSemanticQuery(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') handleSemanticSearch()
                   }}
                 />
-                <Button variant="outline" onClick={handleSemanticSearch} isLoading={isSemanticSearching} className="gap-2 md:w-44">
+                <Button onClick={handleSemanticSearch} isLoading={isSearching} className="gap-2 md:w-44">
                   <Search className="w-4 h-4" />
-                  Semantic Search
+                  Search
                 </Button>
               </div>
-              {semanticResults && (
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-muted-foreground">
-                    Ranked {semanticResults.length} candidates by semantic match
-                  </p>
-                  <Button variant="ghost" onClick={() => setSemanticResults(null)}>
-                    Clear Semantic
-                  </Button>
-                </div>
-              )}
               <div className="flex justify-end">
                 <Button variant="ghost" onClick={handleClearFilters}>
-                  Clear Filters
+                  Clear
                 </Button>
               </div>
-            </div>
-          )}
-          {!showMoreFilters && semanticResults && (
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">
-                Semantic ranking active for "{semanticQuery}"
-              </p>
-              <Button variant="ghost" onClick={handleClearFilters}>
-                Clear Search
-              </Button>
             </div>
           )}
         </CardContent>
@@ -329,27 +457,31 @@ export function CandidatesPage() {
 
       <div className="mb-4">
         <p className="text-sm text-muted-foreground">
-          Showing {filteredCandidates.length} of {candidates.length} candidates
-          {selectedCandidates.length > 0 && ` • ${selectedCandidates.length} selected`}
-          {semanticResults && ` • semantic ranked`}
+          {searchResults
+            ? `Showing ${displayedCandidates.length} ${searchMode} result${displayedCandidates.length === 1 ? '' : 's'}`
+            : `Showing ${displayedCandidates.length} candidates`}
+          {selectedCandidates.length > 0 && ` - ${selectedCandidates.length} selected`}
+          {searchResults && searchMode === 'semantic' && ` - ranked by semantic match`}
         </p>
       </div>
 
       <div className="space-y-3">
-        {isLoading ? (
+        {isLoading && !searchResults ? (
           <Card>
             <CardContent className="py-12 text-center">
               <p className="text-muted-foreground">Loading candidates...</p>
             </CardContent>
           </Card>
-        ) : filteredCandidates.length === 0 ? (
+        ) : displayedCandidates.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">No candidates found matching your filters.</p>
+              <p className="text-muted-foreground">
+                {searchResults ? 'No candidates matched this search.' : 'No candidates available.'}
+              </p>
             </CardContent>
           </Card>
         ) : (
-          filteredCandidates.map((candidate) => (
+          displayedCandidates.map((candidate) => (
             <Card key={candidate.id} className="hover:shadow-md transition-shadow">
               <CardContent className="py-4 px-6">
                 <div className="flex items-center gap-4">
@@ -370,7 +502,7 @@ export function CandidatesPage() {
                       <Badge className={CANDIDATE_STAGE_COLORS[candidate.stage]}>
                         {CANDIDATE_STAGES[candidate.stage]}
                       </Badge>
-                      {semanticResults && (
+                      {searchResults && searchMode === 'semantic' && (
                         <Badge variant="secondary">
                           {semanticById.get(candidate.id)?.similarity != null
                             ? `${Math.round((semanticById.get(candidate.id)?.similarity ?? 0) * 100)}% match`
@@ -397,18 +529,6 @@ export function CandidatesPage() {
                       <div className="w-16 h-2 bg-muted rounded-full overflow-hidden mt-1">
                         <div className="h-full bg-primary transition-all" style={{ width: `${(candidate.score || 0) * 100}%` }} />
                       </div>
-                    </div>
-                    <div className="flex gap-1 flex-wrap max-w-xs justify-end">
-                      {candidate.skills.slice(0, 2).map((skill) => (
-                        <Badge key={skill} variant="secondary" className="text-xs">
-                          {skill}
-                        </Badge>
-                      ))}
-                      {candidate.skills.length > 2 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{candidate.skills.length - 2}
-                        </Badge>
-                      )}
                     </div>
                     <div className="flex gap-2">
                       <Button
@@ -440,7 +560,7 @@ export function CandidatesPage() {
           setDetailCandidate(null)
         }}
         title={selectedDetail ? `${selectedDetail.firstName} ${selectedDetail.lastName}` : 'Candidate Details'}
-        className="max-w-4xl max-h-[90vh] overflow-y-auto"
+        className="max-w-[50rem] max-h-[90vh] overflow-y-auto"
       >
         {isDetailLoading && (
           <p className="text-sm text-muted-foreground">Loading candidate details...</p>
@@ -511,12 +631,16 @@ export function CandidatesPage() {
                 {extractedProjects.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs uppercase text-muted-foreground">Projects</p>
-                    {extractedProjects.slice(0, 3).map((project: any, index: number) => (
-                      <div key={`${project.name ?? 'project'}-${index}`} className="rounded-md bg-muted p-3">
-                        <p className="text-sm font-medium">{project.name ?? `Project ${index + 1}`}</p>
-                        {project.description && <p className="text-sm text-muted-foreground">{project.description}</p>}
-                      </div>
-                    ))}
+                    {extractedProjects.slice(0, 6).map((project: any, index: number) => {
+                      const title = getProjectTitle(project, index)
+                      const description = getProjectDescription(project)
+                      return (
+                        <div key={`${title}-${index}`} className="rounded-md bg-muted p-3">
+                          <p className="text-sm font-medium">{title}</p>
+                          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -574,7 +698,7 @@ export function CandidatesPage() {
         }
       >
         <p className="text-sm text-muted-foreground">
-          This will use AI to score {selectedCandidates.length || filteredCandidates.length} candidate(s) based on available CV and campaign data.
+          This will use AI to score {selectedCandidates.length || displayedCandidates.length} candidate(s) based on available CV and campaign data.
         </p>
       </Modal>
 

@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '@/constants'
-import type { ApiResponse, CampaignMember, CampaignPositionSummary, Candidate, CandidateFilters, PublicApplicationForm, PublicInterviewSession, RecruitmentCampaign, SemanticCandidateResult, User, VirtualInterview } from '@/types'
+import type { ApiResponse, CampaignMember, CampaignPositionSummary, Candidate, CandidateFilters, CandidateSearchPayload, PublicApplicationForm, PublicInterviewSession, RecruitmentCampaign, SemanticCandidateResult, User, VirtualInterview } from '@/types'
 
 function toBackendEnum(value?: string) {
   return value?.toUpperCase()
@@ -103,6 +103,7 @@ export const api = {
     get: (id: string) => request<Candidate>(`/candidates/${id}`),
     downloadReport: (id: string, filename = 'candidate-evaluation-report.pdf') => download(`/candidates/${id}/report.pdf`, filename),
     upload: (formData: FormData) => request<Candidate>('/candidates/upload', { method: 'POST', body: formData }),
+    search: (payload: CandidateSearchPayload) => request<SemanticCandidateResult[]>('/candidates/search', { method: 'POST', body: JSON.stringify(payload) }),
     updateStage: (id: string, stage: string) => request<Candidate>(`/candidates/${id}/stage`, { method: 'PATCH', body: JSON.stringify({ stage: toBackendEnum(stage) }) }),
     score: (candidateIds?: string[], campaignId?: string) => request('/candidates/score', { method: 'POST', body: JSON.stringify({ candidateIds, campaignId }) }),
     publicUpload: (formData: FormData) => request<Candidate>('/candidates/public/upload', { method: 'POST', body: formData }),
