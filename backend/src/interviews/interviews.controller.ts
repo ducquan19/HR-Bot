@@ -1,9 +1,11 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CreateInterviewDto, SubmitInterviewDto, UpdateInterviewStatusDto } from './dto/interview.dto';
 import { InterviewsService } from './interviews.service';
 
+@ApiTags('Interviews')
 @Controller('interviews')
 export class InterviewsController {
   constructor(private readonly interviews: InterviewsService) {}

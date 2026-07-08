@@ -1,9 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CampaignsService } from './campaigns.service';
 import { CreateApplicationFormDto, CreateCampaignDto, UpdateCampaignDto, UpdateCampaignMemberDto, UpdateCampaignPositionDto, UpsertCampaignMemberDto } from './dto/campaign.dto';
 
+@ApiTags('Campaigns')
 @UseGuards(JwtAuthGuard)
 @Controller('campaigns')
 export class CampaignsController {

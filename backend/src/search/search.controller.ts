@@ -1,7 +1,9 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { SearchService } from './search.service';
 
+@ApiTags('Search')
 @UseGuards(JwtAuthGuard)
 @Controller('search')
 export class SearchController {
