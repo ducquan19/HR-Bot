@@ -84,6 +84,7 @@ export function CandidatesPage() {
   }, [])
 
   const displayedCandidates = searchResults ?? candidates
+  const uploadableCampaigns = campaigns.filter((campaign) => campaign.status === 'active')
 
   const semanticById = useMemo(() => {
     if (searchMode !== 'semantic') return new Map()
@@ -803,7 +804,7 @@ export function CandidatesPage() {
         <div className="space-y-4">
           <Select
             label="Campaign"
-            options={[{ value: '', label: 'Select campaign' }, ...campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))]}
+            options={[{ value: '', label: 'Select campaign' }, ...uploadableCampaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))]}
             value={uploadForm.campaignId}
             onChange={(event) => setUploadForm({ ...uploadForm, campaignId: event.target.value })}
           />

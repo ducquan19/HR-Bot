@@ -12,7 +12,7 @@ import { useCandidatesStore } from '@/stores/candidates-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
-import { Plus, Archive, Trash2, Eye, Calendar, Users, TrendingUp, Copy, ExternalLink } from 'lucide-react'
+import { Plus, Archive, Trash2, Eye, Calendar, Users, TrendingUp, Copy, ExternalLink, RotateCcw } from 'lucide-react'
 import type { CampaignMember, CampaignMemberRole, CampaignPositionSummary, User } from '@/types'
 
 interface CampaignFormPosition {
@@ -149,6 +149,15 @@ export function CampaignsPage() {
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not archive campaign')
+    }
+  }
+
+  const handleActivate = async (id: string) => {
+    try {
+      await updateCampaign(id, { status: 'active' })
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not activate campaign')
     }
   }
 
@@ -455,15 +464,21 @@ export function CampaignsPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDelete(campaign.id)}
-                    className="gap-1 text-red-600 hover:text-red-700"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Delete
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => handleActivate(campaign.id)} className="gap-1">
+                      <RotateCcw className="w-4 h-4" />
+                      Activate
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDelete(campaign.id)}
+                      className="gap-1 text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}

@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import crypto from 'crypto';
-import { ApplicationStage, CampaignMemberRole, UserRole } from '@prisma/client';
+import { ApplicationStage, CampaignMemberRole, CampaignPositionStatus, CampaignStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../files/storage.service';
 import { CV_QUEUE } from '../queue/queue.module';
@@ -428,10 +428,27 @@ export class CandidatesService {
   }
 
   private async resolveCampaignPosition(dto: UploadCandidateDto) {
-    if (dto.campaignPositionId) return dto.campaignPositionId;
+    if (dto.campaignPositionId) {
+      const campaignPosition = await this.prisma.campaignPosition.findUnique({
+        where: { id: dto.campaignPositionId },
+        include: { campaign: true },
+      });
+      if (!campaignPosition) throw new NotFoundException('Campaign position not found');
+      if (campaignPosition.status !== CampaignPositionStatus.OPEN || campaignPosition.campaign.status !== CampaignStatus.ACTIVE) {
+        throw new BadRequestException('Campaign is not active or has no open positions');
+      }
+      return campaignPosition.id;
+    }
     if (!dto.campaignId) return undefined;
-    const cp = await this.prisma.campaignPosition.findFirst({ where: { campaignId: dto.campaignId, status: 'OPEN' } });
-    return cp?.id;
+    const cp = await this.prisma.campaignPosition.findFirst({
+      where: {
+        campaignId: dto.campaignId,
+        status: CampaignPositionStatus.OPEN,
+        campaign: { status: CampaignStatus.ACTIVE },
+      },
+    });
+    if (!cp) throw new BadRequestException('Campaign is not active or has no open positions');
+    return cp.id;
   }
 
   private isSupportedCvFile(file: Express.Multer.File) {
