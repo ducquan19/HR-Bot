@@ -17,8 +17,6 @@ import type { Candidate, CandidateSearchMode, SemanticCandidateResult } from '@/
 export function CandidatesPage() {
   const {
     candidates,
-    selectedCandidates,
-    toggleCandidateSelection,
     loadCandidates,
     uploadCandidate,
     updateCandidate,
@@ -546,7 +544,6 @@ export function CandidatesPage() {
           {searchResults
             ? `Showing ${displayedCandidates.length} ${searchMode} result${displayedCandidates.length === 1 ? '' : 's'}`
             : `Showing ${displayedCandidates.length} candidates`}
-          {selectedCandidates.length > 0 && ` - ${selectedCandidates.length} selected`}
           {searchResults && searchMode === 'semantic' && ` - ranked by semantic match`}
         </p>
       </div>
@@ -571,12 +568,6 @@ export function CandidatesPage() {
             <Card key={candidate.id} className="hover:shadow-md transition-shadow">
               <CardContent className="py-4 px-6">
                 <div className="flex items-center gap-4">
-                  <input
-                    type="checkbox"
-                    checked={selectedCandidates.includes(candidate.id)}
-                    onChange={() => toggleCandidateSelection(candidate.id)}
-                    className="w-4 h-4 rounded"
-                  />
                   <div className="w-10 h-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0">
                     {getInitials(candidate.firstName, candidate.lastName)}
                   </div>

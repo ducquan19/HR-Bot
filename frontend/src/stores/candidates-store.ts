@@ -4,7 +4,6 @@ import { api } from '@/lib/api'
 
 interface CandidatesState {
   candidates: Candidate[]
-  selectedCandidates: string[]
   filters: CandidateFilters
   isLoading: boolean
 
@@ -16,9 +15,6 @@ interface CandidatesState {
   updateCandidate: (id: string, candidate: Partial<Candidate>) => Promise<void>
   deleteCandidate: (id: string) => Promise<void>
   
-  setSelectedCandidates: (ids: string[]) => void
-  toggleCandidateSelection: (id: string) => void
-  
   setFilters: (filters: CandidateFilters) => void
   getFilteredCandidates: () => Candidate[]
   
@@ -27,7 +23,6 @@ interface CandidatesState {
 
 export const useCandidatesStore = create<CandidatesState>((set, get) => ({
   candidates: [],
-  selectedCandidates: [],
   filters: {},
   isLoading: false,
 
@@ -96,29 +91,15 @@ export const useCandidatesStore = create<CandidatesState>((set, get) => ({
 
   deleteCandidate: async (id) => {
     const previousCandidates = get().candidates
-    const previousSelected = get().selectedCandidates
     set((state) => ({
       candidates: state.candidates.filter((c) => c.id !== id),
-      selectedCandidates: state.selectedCandidates.filter((candidateId) => candidateId !== id),
     }))
     try {
       await api.candidates.remove(id)
     } catch (error) {
-      set({ candidates: previousCandidates, selectedCandidates: previousSelected })
+      set({ candidates: previousCandidates })
       throw error
     }
-  },
-
-  setSelectedCandidates: (ids) => {
-    set({ selectedCandidates: ids })
-  },
-
-  toggleCandidateSelection: (id) => {
-    set((state) => ({
-      selectedCandidates: state.selectedCandidates.includes(id)
-        ? state.selectedCandidates.filter((cId) => cId !== id)
-        : [...state.selectedCandidates, id],
-    }))
   },
 
   setFilters: (filters) => {
