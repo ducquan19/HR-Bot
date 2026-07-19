@@ -8,6 +8,7 @@ import {
   Skill,
 } from "@prisma/client";
 import { z } from "zod";
+import { LocalEmbeddingService } from "./local-embedding.service";
 
 const parsedCvSchema = z.object({
   firstName: z.string().optional(),
@@ -234,7 +235,10 @@ export class AiService implements OnModuleInit {
   private genai: GoogleGenAI;
   private readonly logger = new Logger(AiService.name);
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly localEmbeddingService: LocalEmbeddingService,
+  ) {
     const apiKey =
       this.config.get<string>("ai.geminiApiKey") ??
       this.config.get<string>("GEMINI_API_KEY");
@@ -389,10 +393,69 @@ export class AiService implements OnModuleInit {
   }
 
   async screenCandidate(input: ScreeningInput) {
+    let result: any;
     if (this.config.get<string>("ai.provider") === "gemini") {
-      return this.screenCandidateWithGemini(input);
+      result = await this.screenCandidateWithGemini(input);
+    } else {
+      result = await this.screenCandidateWithMock(input);
     }
-    return this.screenCandidateWithMock(input);
+
+    // 2. Deterministic Scoring via Local Embeddings
+    try {
+      const cvText = [
+        input.parsedCv.summary,
+        input.parsedCv.skills.join(', '),
+        input.parsedCv.experiences.map(e => `${e.title ?? ''} ${e.company ?? ''}: ${e.description ?? ''}`).join(' '),
+      ].join(' ').slice(0, 10000);
+      
+      const jdText = [
+        input.jd?.overview,
+        input.jd?.responsibilities,
+        input.jd?.requirements,
+        input.positionSkills?.map(s => s.skill.name).join(', ')
+      ].filter(Boolean).join(' ').slice(0, 10000);
+
+      if (cvText.trim() && jdText.trim()) {
+        const cvVector = await this.localEmbeddingService.embed(cvText);
+        const jdVector = await this.localEmbeddingService.embed(jdText);
+        
+        const similarity = this.cosineSimilarity(cvVector, jdVector);
+        // Text embedding cosine similarity range is roughly [0.2, 0.9] depending on the model.
+        // We do a simple normalization or just map max(0, sim * 100)
+        let calculatedScore = Math.max(0, Math.min(100, Math.round(similarity * 100)));
+        // Tweak: if it's very low, scale it so it looks like a 0-100 scale.
+        // For MiniLM, identical is 1.0, totally unrelated might be 0.1
+        calculatedScore = Math.min(100, Math.max(0, Math.round((similarity - 0.2) * 1.25 * 100)));
+        
+        result.overallScore = calculatedScore;
+        result.experienceScore = calculatedScore;
+        result.skillScore = calculatedScore;
+        result.educationScore = calculatedScore;
+        
+        if (calculatedScore >= 80) result.recommendation = 'STRONG_RECOMMEND';
+        else if (calculatedScore >= 65) result.recommendation = 'RECOMMEND';
+        else if (calculatedScore >= 50) result.recommendation = 'CONSIDER';
+        else result.recommendation = 'REJECT';
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to calculate deterministic embedding score: ${(error as Error).message}`);
+    }
+
+    return result;
+  }
+
+  private cosineSimilarity(a: number[], b: number[]): number {
+    if (a.length !== b.length) return 0;
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+    if (normA === 0 || normB === 0) return 0;
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 
   private async screenCandidateWithGemini(input: ScreeningInput) {
@@ -569,7 +632,7 @@ export class AiService implements OnModuleInit {
         Do NOT wrap the JSON array in any markdown formatting like \`\`\`json. Return only the raw JSON array string.`;
 
         const response = await this.genai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: this.config.get<string>("ai.geminiModel", "gemini-3.1-flash-lite"),
           contents: prompt,
           config: {
             responseMimeType: "application/json",
@@ -658,10 +721,7 @@ export class AiService implements OnModuleInit {
     text: string,
     purpose: "query" | "document" = "query",
   ): Promise<number[]> {
-    if (this.config.get<string>("ai.provider") === "gemini") {
-      return this.embedWithGemini(text, purpose);
-    }
-    return this.embedWithMock(text);
+    return this.localEmbeddingService.embed(text);
   }
 
   private async embedWithGemini(text: string, purpose: "query" | "document") {

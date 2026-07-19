@@ -42,6 +42,10 @@ export class CandidateQueryDto {
   search?: string;
 
   @IsOptional()
+  @IsString()
+  campaignId?: string;
+
+  @IsOptional()
   @IsEnum(ApplicationStage)
   stage?: ApplicationStage;
 
@@ -92,6 +96,10 @@ export class CandidateSearchDto {
   @IsOptional()
   @IsEnum(ApplicationStage)
   stage?: ApplicationStage;
+
+  @IsOptional()
+  @IsString()
+  campaignId?: string;
 
   @IsOptional()
   @Transform(({ value }) => Number(value))

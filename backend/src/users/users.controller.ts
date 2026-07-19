@@ -19,7 +19,7 @@ export class UsersController {
   }
 
   @Get('assignable')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER, UserRole.HIRING_MANAGER)
+  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
   findAssignable() {
     return this.users.findAssignable();
   }

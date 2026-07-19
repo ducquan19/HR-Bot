@@ -1,0 +1,45 @@
+{
+  "summary": "15-minute conversational screen for a Data Scientist. Focus on problem framing, modelling rigor, and communicating results.",
+  "duration_minutes": 15,
+  "competencies": [
+    {
+      "name": "Problem framing",
+      "weight": 0.35,
+      "description": "Translating a business question into a measurable modelling problem."
+    },
+    {
+      "name": "Modelling & validation",
+      "weight": 0.35,
+      "description": "Choosing approaches, avoiding leakage, validating honestly."
+    },
+    {
+      "name": "Communication of results",
+      "weight": 0.3,
+      "description": "Explaining findings and uncertainty to non-technical stakeholders."
+    }
+  ],
+  "interview_topics": [
+    {
+      "title": "Problem framing",
+      "questions": [
+        "A product team asks you to 'reduce churn'. How do you turn that into a modelling problem?",
+        "What metric would you optimise, and why?"
+      ]
+    },
+    {
+      "title": "Modelling & validation",
+      "questions": [
+        "How do you guard against data leakage in your validation setup?",
+        "How do you decide a model is good enough to ship?"
+      ]
+    }
+  ],
+  "coding_assignment": null,
+  "inspector_criteria": [
+    "Quality of problem framing and metric choice",
+    "Rigor in validation and leakage avoidance",
+    "Ability to communicate uncertainty",
+    "Clarity of reasoning"
+  ],
+  "source": "mock"
+}

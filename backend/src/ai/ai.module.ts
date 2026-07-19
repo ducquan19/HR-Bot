@@ -9,9 +9,14 @@ import { CandidateScreeningService } from './candidate-screening.service';
 import { CvProcessingWorker } from './cv-processing.worker';
 import { InterviewEvaluationWorker } from './interview-evaluation.worker';
 
+import { AiController } from './ai.controller';
+import { LivekitService } from './livekit.service';
+import { LocalEmbeddingService } from './local-embedding.service';
+
 @Module({
   imports: [ConfigModule, QueueModule, FilesModule, RealtimeModule, BullModule.registerQueue({ name: CV_QUEUE }, { name: INTERVIEW_QUEUE })],
-  providers: [AiService, CandidateScreeningService, CvProcessingWorker, InterviewEvaluationWorker],
-  exports: [AiService, CandidateScreeningService],
+  controllers: [AiController],
+  providers: [AiService, CandidateScreeningService, CvProcessingWorker, InterviewEvaluationWorker, LivekitService, LocalEmbeddingService],
+  exports: [AiService, CandidateScreeningService, LocalEmbeddingService],
 })
 export class AiModule {}

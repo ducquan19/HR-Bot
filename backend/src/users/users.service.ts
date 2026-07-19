@@ -15,7 +15,7 @@ export class UsersService {
 
   findAssignable() {
     return this.prisma.user.findMany({
-      where: { isActive: true, role: { in: [UserRole.ADMIN, UserRole.RECRUITER, UserRole.HIRING_MANAGER] } },
+      where: { isActive: true, role: { in: [UserRole.ADMIN, UserRole.RECRUITER] } },
       select: { id: true, email: true, fullName: true, role: true, isActive: true, createdAt: true },
       orderBy: { fullName: 'asc' },
     }).then((users) => users.map((user) => this.toFrontendUser(user)));

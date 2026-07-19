@@ -1,0 +1,57 @@
+{
+  "summary": "15-minute conversational screen for an AI Engineer role at TechVision Vietnam. Focus on LLM application engineering, RAG, and production/MLOps maturity. Candidate: Nguyen Minh Tuan.",
+  "duration_minutes": 15,
+  "competencies": [
+    {
+      "name": "LLM application engineering",
+      "weight": 0.4,
+      "description": "Building with LLM APIs: prompting, tool/function calling, structured output, evaluation."
+    },
+    {
+      "name": "RAG & retrieval",
+      "weight": 0.3,
+      "description": "Chunking, embeddings, vector stores, retrieval quality and grounding."
+    },
+    {
+      "name": "MLOps & productionisation",
+      "weight": 0.2,
+      "description": "Serving, containerisation, monitoring, cost/latency trade-offs."
+    },
+    {
+      "name": "Communication",
+      "weight": 0.1,
+      "description": "Clarity of reasoning and ability to explain trade-offs."
+    }
+  ],
+  "interview_topics": [
+    {
+      "title": "LLM application design",
+      "questions": [
+        "Walk me through an LLM-powered feature you built end to end. What did the request flow look like?",
+        "How did you handle prompts, tool calling, and structured outputs reliably?"
+      ]
+    },
+    {
+      "title": "RAG quality",
+      "questions": [
+        "How do you decide chunking and embedding strategy for a knowledge base?",
+        "When retrieval returns irrelevant context, how do you diagnose and fix it?"
+      ]
+    },
+    {
+      "title": "Production & evaluation",
+      "questions": [
+        "How do you evaluate an LLM system before and after shipping?",
+        "What did you do to control latency and cost in production?"
+      ]
+    }
+  ],
+  "coding_assignment": null,
+  "inspector_criteria": [
+    "Depth of hands-on LLM/RAG experience versus surface familiarity",
+    "Rigor around evaluation and grounding",
+    "Awareness of production trade-offs (latency, cost, monitoring)",
+    "Clarity and structure of explanations"
+  ],
+  "source": "mock"
+}
