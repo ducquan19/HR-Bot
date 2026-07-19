@@ -37,9 +37,10 @@ export class CandidatesService {
     if (query.skill) {
       where.skills = { some: { skill: { name: { contains: query.skill, mode: 'insensitive' } } } };
     }
-    if (query.stage || query.scoreMin !== undefined || query.scoreMax !== undefined) {
+    if (query.stage || query.scoreMin !== undefined || query.scoreMax !== undefined || query.campaignId) {
       where.applications = { some: {} };
       if (query.stage) where.applications.some.currentStage = query.stage;
+      if (query.campaignId) where.applications.some.campaignPosition = { campaignId: query.campaignId };
       if (query.scoreMin !== undefined || query.scoreMax !== undefined) {
         where.applications.some.screeningResult = {
           overallScore: {
@@ -108,9 +109,10 @@ export class CandidatesService {
       }
     }
 
-    if (dto.stage || dto.scoreMin !== undefined || dto.scoreMax !== undefined) {
+    if (dto.stage || dto.scoreMin !== undefined || dto.scoreMax !== undefined || dto.campaignId) {
       const applicationFilter: any = {};
       if (dto.stage) applicationFilter.currentStage = dto.stage;
+      if (dto.campaignId) applicationFilter.campaignPosition = { campaignId: dto.campaignId };
       if (dto.scoreMin !== undefined || dto.scoreMax !== undefined) {
         applicationFilter.screeningResult = {
           overallScore: {
@@ -513,7 +515,7 @@ export class CandidatesService {
       cvs: { orderBy: { createdAt: 'desc' as const }, take: 1, include: { aiExtractions: { orderBy: { createdAt: 'desc' as const }, take: 1 } } },
       applications: {
         orderBy: { appliedAt: 'desc' as const },
-        include: { screeningResult: true, campaignPosition: { include: { campaign: { include: { members: true } } } } },
+        include: { screeningResult: true, campaignPosition: { include: { campaign: { include: { members: true } }, position: true } } },
       },
     };
   }
@@ -623,6 +625,8 @@ export class CandidatesService {
       gpa: profile.education?.find((e: any) => e.gpa)?.gpa,
       experience: profile.experiences?.reduce((sum: number, e: any) => sum + (e.years ?? 0), 0) ?? (extraction?.parsedJson as any)?.experienceYears ?? 0,
       campaignId: app?.campaignPosition?.campaignId,
+      campaignName: app?.campaignPosition?.campaign?.title,
+      positionName: app?.campaignPosition?.position?.title,
       applicationId: app?.id,
       appliedAt: app?.appliedAt?.toISOString() ?? profile.createdAt.toISOString(),
       updatedAt: profile.updatedAt.toISOString(),

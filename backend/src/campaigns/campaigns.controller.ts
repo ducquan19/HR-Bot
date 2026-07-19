@@ -16,6 +16,11 @@ export class CampaignsController {
     return this.campaigns.findAll(user);
   }
 
+  @Get('job-positions')
+  findAllJobPositions() {
+    return this.campaigns.findAllJobPositions();
+  }
+
   @Get(':id')
   findOne(@CurrentUser() user: { id: string; role: string }, @Param('id') id: string) {
     return this.campaigns.findOne(user, id);

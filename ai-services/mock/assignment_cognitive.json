@@ -1,0 +1,71 @@
+{
+  "type": "cognitive",
+  "summary": "Cognitive aptitude test for a non-tech Sales Executive candidate (Le Thi Mai). Ten ABCD questions covering logical reasoning, numeracy, verbal comprehension, and role-relevant judgement.",
+  "coding": null,
+  "cognitive": {
+    "topic": "General aptitude and sales judgement",
+    "questions": [
+      {
+        "prompt": "If 3 salespeople close 12 deals in 4 days, how many deals do 6 salespeople close in 2 days at the same rate?",
+        "options": ["6", "12", "18", "24"],
+        "answer": "B",
+        "explanation": "Rate is 1 deal per person-day; 6 people x 2 days = 12 deals."
+      },
+      {
+        "prompt": "Which number comes next: 2, 6, 12, 20, 30, ?",
+        "options": ["36", "40", "42", "44"],
+        "answer": "C",
+        "explanation": "Differences increase by 2 each step (4,6,8,10,12); 30+12=42."
+      },
+      {
+        "prompt": "A product's price rises from 200 to 250. What is the percentage increase?",
+        "options": ["20%", "25%", "50%", "80%"],
+        "answer": "B",
+        "explanation": "(250-200)/200 = 25%."
+      },
+      {
+        "prompt": "'All managers in the team attended the workshop. Mai attended the workshop.' Which is necessarily true?",
+        "options": ["Mai is a manager", "Mai is not a manager", "Some attendees are managers", "No conclusion about Mai's role"],
+        "answer": "D",
+        "explanation": "Attending does not imply being a manager; the statement only constrains managers."
+      },
+      {
+        "prompt": "Choose the word most similar in meaning to 'persuade'.",
+        "options": ["Convince", "Confuse", "Ignore", "Delay"],
+        "answer": "A",
+        "explanation": "Persuade and convince are synonyms."
+      },
+      {
+        "prompt": "A client says the price is too high. What is the best first response?",
+        "options": ["Immediately offer the lowest discount", "Ask what value or outcome matters most to them", "End the conversation", "Insist the price is final"],
+        "answer": "B",
+        "explanation": "Understanding the client's value drivers precedes negotiating."
+      },
+      {
+        "prompt": "If a task takes 90 minutes and you start at 10:45, when does it finish?",
+        "options": ["11:45", "12:00", "12:15", "12:30"],
+        "answer": "C",
+        "explanation": "10:45 + 1h30 = 12:15."
+      },
+      {
+        "prompt": "Which is the odd one out: Apple, Banana, Carrot, Mango?",
+        "options": ["Apple", "Banana", "Carrot", "Mango"],
+        "answer": "C",
+        "explanation": "Carrot is a vegetable; the others are fruits."
+      },
+      {
+        "prompt": "A salesperson hits 80% of a 150-unit quarterly target. How many units short are they?",
+        "options": ["20", "30", "40", "120"],
+        "answer": "B",
+        "explanation": "80% of 150 = 120; 150-120 = 30 units short."
+      },
+      {
+        "prompt": "Two clients email at once: one urgent complaint, one routine question. What do you prioritise?",
+        "options": ["The routine question, it is quicker", "The urgent complaint", "Neither until end of day", "Whichever arrived first"],
+        "answer": "B",
+        "explanation": "Urgency and customer-impact take priority over arrival order."
+      }
+    ]
+  },
+  "source": "mock"
+}

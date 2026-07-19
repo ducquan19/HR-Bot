@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Modal } from '@/components/ui/modal'
 import { Alert } from '@/components/ui/alert'
 import { useCandidatesStore } from '@/stores/candidates-store'
 import { useCampaignsStore } from '@/stores/campaigns-store'
+import { useAuth } from '@/hooks/use-auth'
 import { CANDIDATE_STAGES, CANDIDATE_STAGE_COLORS, COMMON_SKILLS } from '@/constants'
 import { api } from '@/lib/api'
 import { formatDate, formatExperienceDuration, getInitials } from '@/lib/utils'
-import { Check, Download, Search, Upload, Eye, Mail, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, Download, Search, Upload, Eye, Mail, Trash2 } from 'lucide-react'
 import type { Candidate, CandidateSearchMode, SemanticCandidateResult } from '@/types'
 
 export function CandidatesPage() {
@@ -24,12 +23,14 @@ export function CandidatesPage() {
     isLoading,
   } = useCandidatesStore()
   const { campaigns, loadCampaigns } = useCampaignsStore()
+  const { isAdmin } = useAuth()
 
   const [searchMode, setSearchMode] = useState<CandidateSearchMode>('criteria')
   const [searchResults, setSearchResults] = useState<SemanticCandidateResult[] | null>(null)
   const [semanticQuery, setSemanticQuery] = useState('')
   const [isSearching, setIsSearching] = useState(false)
   const [isSkillDropdownOpen, setIsSkillDropdownOpen] = useState(false)
+  const [skillSearch, setSkillSearch] = useState('')
   const skillDropdownRef = useRef<HTMLDivElement>(null)
   const [criteriaForm, setCriteriaForm] = useState({
     name: '',
@@ -41,6 +42,7 @@ export function CandidatesPage() {
     experienceMax: '',
     scoreMin: '',
     scoreMax: '',
+    campaignId: '',
   })
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null)
@@ -48,6 +50,8 @@ export function CandidatesPage() {
   const [isDetailLoading, setIsDetailLoading] = useState(false)
   const [isReportDownloading, setIsReportDownloading] = useState(false)
   const [isCvDownloading, setIsCvDownloading] = useState(false)
+  const [stageMoveId, setStageMoveId] = useState<string | null>(null)
+  const stageMoveRef = useRef<HTMLDivElement>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -72,10 +76,14 @@ export function CandidatesPage() {
     return () => window.clearInterval(interval)
   }, [candidates, loadCandidates])
 
+  // Close skill dropdown
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
       if (!skillDropdownRef.current?.contains(event.target as Node)) {
         setIsSkillDropdownOpen(false)
+      }
+      if (!stageMoveRef.current?.contains(event.target as Node)) {
+        setStageMoveId(null)
       }
     }
 
@@ -136,6 +144,7 @@ export function CandidatesPage() {
       experienceMax: '',
       scoreMin: '',
       scoreMax: '',
+      campaignId: '',
     })
   }
 
@@ -144,24 +153,30 @@ export function CandidatesPage() {
     return trimmed ? Number(trimmed) : undefined
   }
 
-  const handleCriteriaSearch = async () => {
+  const handleCriteriaSearch = async (formOverride?: typeof criteriaForm) => {
+    const form = formOverride || criteriaForm
     setIsSearching(true)
     try {
       const results = await api.candidates.search({
         mode: 'criteria',
-        name: criteriaForm.name.trim() || undefined,
-        education: criteriaForm.education.trim() || undefined,
-        skills: criteriaForm.skills.length ? criteriaForm.skills : undefined,
-        skillOperator: criteriaForm.skillOperator,
-        stage: criteriaForm.stage ? criteriaForm.stage.toUpperCase() : undefined,
-        experienceMin: toOptionalNumber(criteriaForm.experienceMin),
-        experienceMax: toOptionalNumber(criteriaForm.experienceMax),
-        scoreMin: toOptionalNumber(criteriaForm.scoreMin),
-        scoreMax: toOptionalNumber(criteriaForm.scoreMax),
+        name: form.name.trim() || undefined,
+        education: form.education.trim() || undefined,
+        skills: form.skills.length ? form.skills : undefined,
+        skillOperator: form.skillOperator,
+        stage: form.stage ? form.stage.toUpperCase() : undefined,
+        experienceMin: toOptionalNumber(form.experienceMin),
+        experienceMax: toOptionalNumber(form.experienceMax),
+        scoreMin: toOptionalNumber(form.scoreMin),
+        scoreMax: toOptionalNumber(form.scoreMax),
+        campaignId: form.campaignId || undefined,
         limit: 100,
       })
       setSearchResults(results)
-      setError('')
+      if (results.length === 0) {
+        setError('Không tìm thấy ứng viên nào phù hợp với tiêu chí của bạn.')
+      } else {
+        setError('')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not search candidates')
     } finally {
@@ -169,22 +184,52 @@ export function CandidatesPage() {
     }
   }
 
-  const handleSemanticSearch = async () => {
+  const handleSemanticSearch = async (formOverride?: typeof criteriaForm) => {
+    const form = formOverride || criteriaForm
     const query = semanticQuery.trim()
     if (!query) {
-      setSearchResults(null)
+      setError('Vui lòng nhập mô tả ứng viên (ít nhất 1 từ khóa) để AI có thể tìm kiếm.')
       return
     }
 
     setIsSearching(true)
     try {
-      const results = await api.candidates.search({ mode: 'semantic', query, limit: 30 })
+      const results = await api.candidates.search({
+        mode: 'semantic',
+        query,
+        stage: form.stage ? form.stage.toUpperCase() : undefined,
+        campaignId: form.campaignId || undefined,
+        limit: 30
+      })
       setSearchResults(results)
-      setError('')
+      if (results.length === 0) {
+        setError('Không tìm thấy ứng viên nào phù hợp với yêu cầu của bạn.')
+      } else {
+        setError('')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not search candidates')
     } finally {
       setIsSearching(false)
+    }
+  }
+
+  const handleGlobalFilterChange = (field: 'stage' | 'campaignId', value: string) => {
+    const newForm = { ...criteriaForm, [field]: value }
+    setCriteriaForm(newForm)
+    if (searchMode === 'criteria') {
+      handleCriteriaSearch(newForm)
+    } else {
+      if (semanticQuery.trim()) {
+        handleSemanticSearch(newForm)
+      } else {
+        // If semantic query is empty, we probably shouldn't search, just filter local?
+        // Wait, the semantic search requires a query. If there's no query, maybe we just clear results or do nothing.
+        // If they haven't searched semantic yet, let's just do nothing.
+        if (searchResults) {
+           setError('Vui lòng nhập mô tả ứng viên (ít nhất 1 từ khóa) để AI có thể tìm kiếm.')
+        }
+      }
     }
   }
 
@@ -342,292 +387,376 @@ export function CandidatesPage() {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Candidates</h1>
-          <p className="text-muted-foreground">Review and manage candidate profiles</p>
+          <h1 className="text-3xl font-black text-gray-900 mb-1">Ứng viên</h1>
+          <p className="text-gray-500 text-sm">Xem và quản lý hồ sơ ứng viên của bạn</p>
         </div>
-        <div className="flex gap-2">
-          <Button className="gap-2" onClick={() => setShowUploadModal(true)}>
+        {(isAdmin || campaigns.some(c => c.memberRole === 'owner' || c.memberRole === 'editor')) && (
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-blue-200"
+          >
             <Upload className="w-4 h-4" />
-            Upload CV
-          </Button>
-        </div>
+            Tải lên CV
+          </button>
+        )}
       </div>
 
       {error && (
-        <Alert variant="error" title="Action failed" className="mb-6">
+        <Alert 
+          variant={error.includes('Không tìm thấy') || error.includes('Vui lòng') ? 'warning' : 'error'} 
+          title={error.includes('Không tìm thấy') || error.includes('Vui lòng') ? 'Thông báo' : 'Đã có lỗi xảy ra'} 
+          className="mb-6"
+        >
           {error}
         </Alert>
       )}
 
-      <Card className="mb-8">
-        <CardContent className="pt-6">
-          <div className="mb-4 flex w-fit rounded-md border border-border p-1">
-            {[
-              { id: 'criteria', label: 'Criteria' },
-              { id: 'semantic', label: 'Semantic' },
-            ].map((mode) => (
+      {/* ── Filter Panel ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-6">
+        {/* Mode Switcher */}
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100">
+          <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+            {([
+              { id: 'criteria', label: '🔍 Tìm theo tiêu chí' },
+              { id: 'semantic', label: '✨ Tìm thông minh' },
+            ] as const).map((mode) => (
               <button
                 key={mode.id}
                 type="button"
                 onClick={() => setSearchMode(mode.id as CandidateSearchMode)}
-                className={`rounded px-4 py-2 text-sm font-medium transition-colors ${
-                  searchMode === mode.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  searchMode === mode.id
+                    ? 'bg-white text-blue-700 shadow-sm font-semibold'
+                    : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
                 {mode.label}
               </button>
             ))}
           </div>
+          {/* Active filter chips */}
+          <div className="flex items-center flex-wrap gap-1.5">
+            {criteriaForm.campaignId && (
+              <span className="flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
+                📁 {campaigns.find(c => c.id === criteriaForm.campaignId)?.name ?? 'Campaign'}
+                <button onClick={() => setCriteriaForm({...criteriaForm, campaignId: ''})} className="hover:text-blue-900">×</button>
+              </span>
+            )}
+            {criteriaForm.stage && (
+              <span className="flex items-center gap-1 px-2.5 py-1 bg-purple-50 text-purple-700 rounded-full text-xs font-medium">
+                {(CANDIDATE_STAGES as Record<string, string>)[criteriaForm.stage] ?? criteriaForm.stage}
+                <button onClick={() => setCriteriaForm({...criteriaForm, stage: ''})} className="hover:text-purple-900">×</button>
+              </span>
+            )}
+            {criteriaForm.skills.map(skill => (
+              <span key={skill} className="flex items-center gap-1 px-2.5 py-1 bg-green-50 text-green-700 rounded-full text-xs font-medium">
+                {skill}
+                <button onClick={() => setCriteriaForm({...criteriaForm, skills: criteriaForm.skills.filter(s => s !== skill)})} className="hover:text-green-900">×</button>
+              </span>
+            ))}
+          </div>
+        </div>
 
-          {searchMode === 'criteria' ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                <Input
-                  label="Name or Email"
-                  placeholder="Jane Nguyen"
+        {searchMode === 'criteria' ? (
+          <div className="p-5">
+            <div className="flex flex-col md:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  className="w-full pl-9 pr-3 h-10 rounded-xl border border-gray-200 bg-gray-50 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all"
+                  placeholder="Tên hoặc Email ứng viên"
                   value={criteriaForm.name}
                   onChange={(event) => setCriteriaForm({ ...criteriaForm, name: event.target.value })}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') handleCriteriaSearch()
-                  }}
+                  onKeyDown={(event) => { if (event.key === 'Enter') handleCriteriaSearch() }}
                 />
-                <Input
-                  label="Education"
-                  placeholder="Computer Science"
-                  value={criteriaForm.education}
-                  onChange={(event) => setCriteriaForm({ ...criteriaForm, education: event.target.value })}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') handleCriteriaSearch()
-                  }}
-                />
-                <div className="relative w-full" ref={skillDropdownRef}>
-                  <div className="mb-2 flex h-5 items-start justify-between gap-2">
-                    <label className="text-sm font-medium text-foreground">Skill</label>
-                    <div className="-mt-1 flex rounded-md border border-border p-0.5">
-                      {[
-                        { id: 'or', label: 'OR' },
-                        { id: 'and', label: 'AND' },
-                      ].map((operator) => (
+              </div>
+              <input
+                className="w-full flex-1 px-3 h-10 rounded-xl border border-gray-200 bg-gray-50 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all"
+                placeholder="Trình độ học vấn"
+                value={criteriaForm.education}
+                onChange={(event) => setCriteriaForm({ ...criteriaForm, education: event.target.value })}
+                onKeyDown={(event) => { if (event.key === 'Enter') handleCriteriaSearch() }}
+              />
+              <div className="relative flex-1" ref={skillDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsSkillDropdownOpen((open) => !open)}
+                  className="flex h-10 w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
+                >
+                  <span className={criteriaForm.skills.length ? 'text-gray-800' : 'text-gray-400'}>
+                    {criteriaForm.skills.length ? `${criteriaForm.skills.length} skill${criteriaForm.skills.length > 1 ? 's' : ''} chọn` : 'Chọn kỹ năng'}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <div className="flex gap-0.5 rounded-lg border border-gray-200 p-0.5">
+                      {(['or', 'and'] as const).map((op) => (
                         <button
-                          key={operator.id}
+                          key={op}
                           type="button"
-                          onClick={() => setCriteriaForm({ ...criteriaForm, skillOperator: operator.id as 'and' | 'or' })}
-                          className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
-                            criteriaForm.skillOperator === operator.id
-                              ? 'bg-primary text-primary-foreground'
-                              : 'text-muted-foreground hover:text-foreground'
+                          onClick={(e) => { e.stopPropagation(); setCriteriaForm({ ...criteriaForm, skillOperator: op }) }}
+                          className={`px-1.5 py-0.5 rounded text-xs font-bold transition-colors ${
+                            criteriaForm.skillOperator === op ? 'bg-blue-600 text-white' : 'text-gray-500'
                           }`}
-                        >
-                          {operator.label}
-                        </button>
+                        >{op.toUpperCase()}</button>
                       ))}
                     </div>
+                    <Check className={`w-3 h-3 ml-1 ${criteriaForm.skills.length ? 'text-blue-600' : 'text-gray-300'}`} />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsSkillDropdownOpen((open) => !open)}
-                    className="flex h-10 w-full items-center rounded-md border border-input bg-background px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <span className={`block w-full overflow-x-auto whitespace-nowrap ${criteriaForm.skills.length ? 'text-foreground' : 'text-muted-foreground'}`}>
-                      {criteriaForm.skills.length ? criteriaForm.skills.join(', ') : 'Any Skill'}
-                    </span>
-                  </button>
-                  {isSkillDropdownOpen && (
-                    <div className="absolute z-20 mt-2 max-h-64 w-full overflow-y-auto rounded-md border border-border bg-background p-1 shadow-lg">
-                      {COMMON_SKILLS.map((skill) => {
-                        const isSelected = criteriaForm.skills.includes(skill)
-                        return (
-                          <button
-                            key={skill}
-                            type="button"
-                            onClick={() => {
-                              const skills = isSelected
-                                ? criteriaForm.skills.filter((item) => item !== skill)
-                                : [...criteriaForm.skills, skill]
-                              setCriteriaForm({ ...criteriaForm, skills })
-                            }}
-                            className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm hover:bg-muted"
-                          >
-                            <span>{skill}</span>
-                            {isSelected && <Check className="h-4 w-4 text-primary" />}
-                          </button>
-                        )
-                      })}
+                </button>
+                {isSkillDropdownOpen && (
+                  <div className="absolute z-20 mt-1.5 max-h-60 w-full overflow-hidden flex flex-col rounded-xl border border-gray-100 bg-white shadow-xl">
+                    <div className="flex items-center border-b border-gray-100 px-3 bg-gray-50/50">
+                      <Search className="mr-2 h-4 w-4 shrink-0 text-gray-400" />
+                      <input
+                        className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-gray-400"
+                        placeholder="Tìm kiếm kỹ năng..."
+                        value={skillSearch}
+                        onChange={(e) => setSkillSearch(e.target.value)}
+                        autoFocus
+                      />
                     </div>
-                  )}
-                </div>
-                <Select
-                  label="Stage"
-                  options={[
-                    { value: '', label: 'Any Stage' },
-                    ...Object.entries(CANDIDATE_STAGES).map(([key, value]) => ({ value: key, label: value })),
-                  ]}
-                  value={criteriaForm.stage}
-                  onChange={(event) => setCriteriaForm({ ...criteriaForm, stage: event.target.value })}
-                />
+                    <div className="flex-1 overflow-y-auto p-1.5">
+                      {COMMON_SKILLS.filter(skill => skill.toLowerCase().includes(skillSearch.toLowerCase())).length === 0 ? (
+                        <p className="py-6 text-center text-sm text-gray-500">Không tìm thấy.</p>
+                      ) : (
+                        COMMON_SKILLS.filter(skill => skill.toLowerCase().includes(skillSearch.toLowerCase())).map((skill) => {
+                          const isSelected = criteriaForm.skills.includes(skill)
+                          return (
+                            <button
+                              key={skill}
+                              type="button"
+                              onClick={() => {
+                                const skills = isSelected
+                                  ? criteriaForm.skills.filter((item) => item !== skill)
+                                  : [...criteriaForm.skills, skill]
+                                setCriteriaForm({ ...criteriaForm, skills })
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
+                                isSelected ? 'bg-blue-50 text-blue-700 font-medium' : 'hover:bg-gray-50 text-gray-700'
+                              }`}
+                            >
+                              <span>{skill}</span>
+                              {isSelected && <Check className="h-4 w-4 text-blue-600" />}
+                            </button>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                <Input
-                  label="Experience Min (Years)"
-                  type="number"
-                  min="0"
-                  placeholder="0"
-                  value={criteriaForm.experienceMin}
-                  onChange={(event) => setCriteriaForm({ ...criteriaForm, experienceMin: event.target.value })}
-                />
-                <Input
-                  label="Experience Max (Years)"
-                  type="number"
-                  min="0"
-                  placeholder="10"
-                  value={criteriaForm.experienceMax}
-                  onChange={(event) => setCriteriaForm({ ...criteriaForm, experienceMax: event.target.value })}
-                />
-                <Input
-                  label="Score Min"
-                  type="number"
-                  min="0"
-                  max="100"
-                  placeholder="70"
-                  value={criteriaForm.scoreMin}
-                  onChange={(event) => setCriteriaForm({ ...criteriaForm, scoreMin: event.target.value })}
-                />
-                <Input
-                  label="Score Max"
-                  type="number"
-                  min="0"
-                  max="100"
-                  placeholder="100"
-                  value={criteriaForm.scoreMax}
-                  onChange={(event) => setCriteriaForm({ ...criteriaForm, scoreMax: event.target.value })}
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={handleClearFilters}>
-                  Clear
-                </Button>
-                <Button onClick={handleCriteriaSearch} isLoading={isSearching} className="gap-2">
-                  <Search className="w-4 h-4" />
-                  Search
-                </Button>
+              {/* Actions */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleClearFilters}
+                  className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 rounded-xl hover:bg-gray-100 transition-all"
+                >
+                  Xóa bộ lọc
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCriteriaSearch()}
+                  disabled={isSearching}
+                  className="flex items-center gap-2 px-5 py-2 h-10 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-all disabled:opacity-60"
+                >
+                  {isSearching ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Search className="w-4 h-4" />}
+                  Tìm kiếm
+                </button>
               </div>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex flex-col gap-2 md:flex-row">
-                <Input
-                  placeholder="React intern with PostgreSQL experience"
+          </div>
+        ) : (
+          <div className="p-5">
+            <div className="flex gap-3">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base">✨</span>
+                <input
+                  placeholder="VD: Lập trình viên React intern có kinh nghiệm PostgreSQL..."
                   value={semanticQuery}
                   onChange={(event) => setSemanticQuery(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') handleSemanticSearch()
-                  }}
+                  onKeyDown={(event) => { if (event.key === 'Enter') handleSemanticSearch() }}
+                  className="w-full pl-10 pr-4 h-11 rounded-xl border border-gray-200 bg-gray-50 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all"
                 />
-                <Button onClick={handleSemanticSearch} isLoading={isSearching} className="gap-2 md:w-44">
-                  <Search className="w-4 h-4" />
-                  Search
-                </Button>
               </div>
-              <div className="flex justify-end">
-                <Button variant="ghost" onClick={handleClearFilters}>
-                  Clear
-                </Button>
-              </div>
+              <button
+                type="button"
+                onClick={() => handleSemanticSearch()}
+                disabled={isSearching}
+                className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:opacity-90 text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-blue-200 disabled:opacity-60"
+              >
+                {isSearching ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Search className="w-4 h-4" />}
+                Tìm AI
+              </button>
+              {semanticQuery && (
+                <button
+                  type="button"
+                  onClick={handleClearFilters}
+                  className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 rounded-xl hover:bg-gray-100 transition-all"
+                >
+                  ×
+                </button>
+              )}
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <p className="text-xs text-gray-400 mt-2 ml-1">Mô tả ứng viên bạn đang tìm bằng ngôn ngữ tự nhiên. AI sẽ tìm những người phù hợp nhất.</p>
+          </div>
+        )}
 
-      <div className="mb-4">
-        <p className="text-sm text-muted-foreground">
-          {searchResults
-            ? `Showing ${displayedCandidates.length} ${searchMode} result${displayedCandidates.length === 1 ? '' : 's'}`
-            : `Showing ${displayedCandidates.length} candidates`}
-          {searchResults && searchMode === 'semantic' && ` - ranked by semantic match`}
-        </p>
       </div>
 
-      <div className="space-y-3">
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-sm text-gray-500">
+          {searchResults
+            ? `Hiển thị ${displayedCandidates.length} kết quả ${searchMode === 'semantic' ? '· Sắp xếp theo mức độ phù hợp AI' : ''}`
+            : `${displayedCandidates.length} ứng viên`}
+        </p>
+
+        <div className="flex items-center gap-2">
+          <select
+            className="w-[180px] px-3 h-9 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
+            value={criteriaForm.stage}
+            onChange={(event) => handleGlobalFilterChange('stage', event.target.value)}
+          >
+            <option value="">Tất cả giai đoạn</option>
+            {Object.entries(CANDIDATE_STAGES).map(([key, value]) => (
+              <option key={key} value={key}>{value}</option>
+            ))}
+          </select>
+          <select
+            className="w-[200px] px-3 h-9 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
+            value={criteriaForm.campaignId}
+            onChange={(event) => handleGlobalFilterChange('campaignId', event.target.value)}
+          >
+            <option value="">Tất cả chiến dịch</option>
+            {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="space-y-2">
         {isLoading && !searchResults ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">Loading candidates...</p>
-            </CardContent>
-          </Card>
+          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+            <p className="text-gray-400 text-sm">Đang tải ứng viên...</p>
+          </div>
         ) : displayedCandidates.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">
-                {searchResults ? 'No candidates matched this search.' : 'No candidates available.'}
-              </p>
-            </CardContent>
-          </Card>
+          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+            <p className="text-gray-400 text-sm">
+              {searchResults ? 'Không tìm thấy ứng viên phù hợp.' : 'Chưa có ứng viên nào.'}
+            </p>
+          </div>
         ) : (
-          displayedCandidates.map((candidate) => (
-            <Card key={candidate.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="py-4 px-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0">
+          displayedCandidates.map((candidate) => {
+            const scoreVal = (candidate.score || 0) * 100
+            const scoreColor = scoreVal >= 80 ? 'bg-green-500' : scoreVal >= 60 ? 'bg-blue-500' : 'bg-yellow-500'
+            return (
+              <div key={candidate.id} className="bg-white rounded-2xl border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all">
+                <div className="flex items-center gap-4 px-5 py-4">
+                  {/* Avatar */}
+                  <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 shadow-sm">
                     {getInitials(candidate.firstName, candidate.lastName)}
                   </div>
+
+                  {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-semibold truncate">
+                    <div className="flex items-center flex-wrap gap-2 mb-0.5">
+                      <p className="font-semibold text-gray-900 truncate">
                         {candidate.firstName} {candidate.lastName}
                       </p>
-                      <Badge className={CANDIDATE_STAGE_COLORS[candidate.stage]}>
+                      {candidate.campaignName && (
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-full truncate max-w-[150px]" title={`${candidate.campaignName} - ${candidate.positionName}`}>
+                          📁 {candidate.campaignName}
+                        </span>
+                      )}
+                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${CANDIDATE_STAGE_COLORS[candidate.stage]}`}>
                         {CANDIDATE_STAGES[candidate.stage]}
-                      </Badge>
+                      </span>
                       {searchResults && searchMode === 'semantic' && (
-                        <Badge variant="secondary">
+                        <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-xs font-medium rounded-full">
                           {semanticById.get(candidate.id)?.similarity != null
                             ? `${Math.round((semanticById.get(candidate.id)?.similarity ?? 0) * 100)}% match`
                             : 'keyword match'}
-                        </Badge>
+                        </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <div className="text-sm text-gray-500">
                       {renderCandidateContact(candidate)}
                     </div>
                   </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <div className="text-sm font-semibold">{Math.round((candidate.score || 0) * 100)}%</div>
-                      <div className="w-16 h-2 bg-muted rounded-full overflow-hidden mt-1">
-                        <div className="h-full bg-primary transition-all" style={{ width: `${(candidate.score || 0) * 100}%` }} />
-                      </div>
+
+                  {/* Score */}
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-sm font-bold text-gray-800">{Math.round(scoreVal)}%</div>
+                    <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1">
+                      <div className={`h-full ${scoreColor} rounded-full transition-all`} style={{ width: `${scoreVal}%` }} />
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openCandidateDetail(candidate.id)}
-                        className="gap-1"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                    <p className="text-xs text-gray-400 mt-0.5">Độ phù hợp</p>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => openCandidateDetail(candidate.id)}
+                      className="w-8 h-8 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 flex items-center justify-center transition-all"
+                    >
+                      <Eye className="w-4 h-4 text-gray-600" />
+                    </button>
+                    {(isAdmin || campaigns.find(c => c.id === candidate.campaignId)?.memberRole === 'owner' || campaigns.find(c => c.id === candidate.campaignId)?.memberRole === 'editor') && (
+                      <button
                         onClick={() => setDeleteTargetId(candidate.id)}
-                        className="text-red-600 hover:text-red-700"
-                        aria-label={`Delete ${candidate.firstName} ${candidate.lastName}`}
+                        className="w-8 h-8 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 flex items-center justify-center transition-all"
                       >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                      <Select
-                        options={Object.entries(CANDIDATE_STAGES).map(([key, value]) => ({ value: key, label: value }))}
-                        value={candidate.stage}
-                        onChange={(event) => handleMoveStage(candidate.id, event.target.value)}
-                      />
+                        <Trash2 className="w-4 h-4 text-gray-500 hover:text-red-600" />
+                      </button>
+                    )}
+
+                    {/* Stage picker */}
+                    <div className="relative" ref={stageMoveId === candidate.id ? stageMoveRef : undefined}>
+                      <button
+                        onClick={() => setStageMoveId(stageMoveId === candidate.id ? null : candidate.id)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all ${CANDIDATE_STAGE_COLORS[candidate.stage]}`}
+                      >
+                        {CANDIDATE_STAGES[candidate.stage]}
+                        <ChevronDown className={`w-3 h-3 transition-transform ${stageMoveId === candidate.id ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {stageMoveId === candidate.id && (
+                        <div className="absolute right-0 top-full mt-1.5 z-30 w-52 bg-white rounded-2xl border border-gray-100 shadow-2xl shadow-gray-200 overflow-hidden">
+                          <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider px-3 pt-3 pb-1.5">Chuyển giai đoạn</p>
+                          {(Object.entries(CANDIDATE_STAGES) as [string, string][]).map(([key, label]) => {
+                            const isCurrentStage = candidate.stage === key
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                disabled={isCurrentStage}
+                                onClick={() => {
+                                  handleMoveStage(candidate.id, key)
+                                  setStageMoveId(null)
+                                }}
+                                className={`flex items-center justify-between w-full px-3 py-2 text-sm transition-colors ${
+                                  isCurrentStage
+                                    ? 'opacity-50 cursor-default'
+                                    : 'hover:bg-gray-50'
+                                }`}
+                              >
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${(CANDIDATE_STAGE_COLORS as Record<string, string>)[key]}`}>
+                                  {label}
+                                </span>
+                                {isCurrentStage && <Check className="w-3.5 h-3.5 text-gray-400" />}
+                              </button>
+                            )
+                          })}
+                          <div className="h-2" />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))
+              </div>
+            )
+          })
         )}
       </div>
 
@@ -661,7 +790,7 @@ export function CandidatesPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-4">
               <div className="rounded-md border border-border p-3">
-                <p className="text-xs text-muted-foreground">AI Score</p>
+                <p className="text-xs text-muted-foreground">Độ phù hợp</p>
                 <p className="text-xl font-semibold">{aiScore !== undefined ? `${Math.round(aiScore)}%` : 'N/A'}</p>
               </div>
               <div className="rounded-md border border-border p-3">
@@ -733,7 +862,7 @@ export function CandidatesPage() {
             )}
             {selectedDetail.screeningResult && (
               <div className="rounded-md border border-border p-4">
-                <p className="text-sm font-medium mb-3">AI Screening Report</p>
+                <p className="text-sm font-medium mb-3">Phân tích mức độ phù hợp</p>
                 <div className="grid gap-3 sm:grid-cols-3 mb-4">
                   {[
                     ['Skills', selectedDetail.screeningResult.skillScore],
@@ -793,27 +922,59 @@ export function CandidatesPage() {
       <Modal
         isOpen={showUploadModal}
         onClose={() => setShowUploadModal(false)}
-        title="Upload CV"
+        title="Tải lên CV ứng viên"
         footer={
           <>
-            <Button variant="outline" onClick={() => setShowUploadModal(false)}>Cancel</Button>
-            <Button onClick={handleUpload} isLoading={isLoading}>Upload</Button>
+            <Button variant="outline" onClick={() => setShowUploadModal(false)}>Hủy bỏ</Button>
+            <Button onClick={handleUpload} isLoading={isLoading}>Tải lên</Button>
           </>
         }
       >
-        <div className="space-y-4">
+        <div className="space-y-6 py-2">
           <Select
-            label="Campaign"
-            options={[{ value: '', label: 'Select campaign' }, ...uploadableCampaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))]}
+            label="Chiến dịch tuyển dụng"
+            options={[{ value: '', label: 'Chọn chiến dịch' }, ...uploadableCampaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))]}
             value={uploadForm.campaignId}
             onChange={(event) => setUploadForm({ ...uploadForm, campaignId: event.target.value })}
           />
-          <Input
-            label="CV File"
-            type="file"
-            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            onChange={(event) => setUploadForm({ ...uploadForm, file: event.target.files?.[0] ?? null })}
-          />
+          
+          <div className="space-y-2">
+            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+              Tệp CV (PDF, DOCX)
+            </label>
+            <div className={`relative flex flex-col items-center justify-center w-full h-44 border-2 border-dashed rounded-xl transition-all duration-200 group ${uploadForm.file ? 'border-blue-500 bg-blue-50/50' : 'border-gray-200 hover:border-blue-400 hover:bg-blue-50/30'}`}>
+              <input
+                id="cv-upload"
+                type="file"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={(event) => setUploadForm({ ...uploadForm, file: event.target.files?.[0] ?? null })}
+              />
+              <div className="flex flex-col items-center justify-center pt-5 pb-6 pointer-events-none px-4 text-center">
+                {uploadForm.file ? (
+                  <>
+                    <div className="w-12 h-12 mb-3 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shadow-sm">
+                      <Check className="w-6 h-6" />
+                    </div>
+                    <p className="mb-1 text-sm font-semibold text-blue-700 truncate max-w-full">
+                      {uploadForm.file.name}
+                    </p>
+                    <p className="text-xs text-blue-500 font-medium mt-1">Nhấn hoặc kéo thả để thay đổi tệp</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-12 h-12 mb-4 rounded-full bg-gray-100 group-hover:bg-blue-100 flex items-center justify-center text-gray-500 group-hover:text-blue-600 transition-colors shadow-sm">
+                      <Upload className="w-6 h-6" />
+                    </div>
+                    <p className="mb-2 text-sm text-gray-600">
+                      <span className="font-semibold text-blue-600">Nhấn để chọn tệp</span> hoặc kéo thả vào khung này
+                    </p>
+                    <p className="text-xs text-gray-400 font-medium">Hỗ trợ định dạng PDF, DOCX (Tối đa 10MB)</p>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </Modal>
     </div>

@@ -1,94 +1,111 @@
-# HR Bot
+# HR Bot - Trợ Lý Tuyển Dụng Trí Tuệ Nhân Tạo (AI)
 
-AI-powered assistant for technical hiring. HR Bot helps recruiters manage recruitment campaigns, collect CVs, parse and screen candidates with AI, run virtual interviews, search candidate profiles, and export evaluation reports.
+HR Bot là nền tảng quản lý tuyển dụng thông minh được tích hợp trí tuệ nhân tạo (AI), giúp các doanh nghiệp tự động hóa và tối ưu hóa toàn bộ quy trình tuyển dụng. Từ việc tạo chiến dịch, thu thập CV, trích xuất thông tin, đánh giá độ phù hợp cho đến việc thực hiện **phỏng vấn tự động bằng giọng nói (Voice AI)**, HR Bot giúp tiết kiệm tối đa thời gian và chi phí cho bộ phận nhân sự.
 
-## Table of Contents
+---
 
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
-- [Environment Variables](#environment-variables)
-- [Useful Commands](#useful-commands)
-- [Default Accounts](#default-accounts)
-- [Main URLs](#main-urls)
-- [Troubleshooting](#troubleshooting)
-- [Documentation](#documentation)
+## 🌟 Các Tính Năng Nổi Bật (Key Features)
 
-## Features
+### 1. Quản Lý Tuyển Dụng Toàn Diện
+- **Quản lý Chiến dịch & Vị trí:** Tạo, chỉnh sửa và theo dõi các chiến dịch tuyển dụng. Quản lý yêu cầu công việc (Job Description) và bộ kỹ năng (Skills).
+- **Trang ứng tuyển (Public Application Page):** Cung cấp đường dẫn công khai cho ứng viên nộp hồ sơ và tải lên CV trực tiếp.
 
-- Recruiter/admin authentication with JWT.
-- Recruitment campaign CRUD with job description, skills, public application link, and candidate count.
-- Public application form for candidates to submit profile information and CV files.
-- CV upload, storage, parsing worker, and AI screening workflow.
-- Candidate list with filters, stage updates, detail modal, AI screening report, and PDF report export.
-- Semantic candidate search with pgvector-backed embeddings.
-- Virtual interview creation, email invite, public interview workspace, answer submission, and local draft saving.
-- Dashboard summary for campaigns, candidates, funnel, score distribution, and top skills.
-- PostgreSQL schema designed for campaigns, candidates, CVs, AI extraction, screening, interviews, talent pools, and audit logs.
+### 2. Xử Lý và Đánh Giá CV Bằng AI
+- **Trích xuất dữ liệu (CV Parsing):** Tự động đọc và trích xuất thông tin ứng viên từ file PDF bằng AI (hỗ trợ Google Gemini / OpenAI).
+- **Chấm điểm & Xếp hạng (CV Screening):** Đánh giá mức độ phù hợp của ứng viên với yêu cầu công việc thông qua thuật toán Semantic Search.
+- **Tìm kiếm Ngữ nghĩa (Semantic Search):** Tìm kiếm ứng viên dựa trên ý nghĩa của kỹ năng và kinh nghiệm thay vì chỉ dùng từ khóa (sử dụng cơ sở dữ liệu vector).
 
-## Tech Stack
+### 3. Phỏng Vấn AI Qua Giọng Nói (Voice AI Interviewer)
+- **Giao tiếp Thời gian thực (Real-time WebRTC):** Thực hiện cuộc gọi phỏng vấn hai chiều với AI qua đường truyền độ trễ thấp sử dụng **LiveKit**.
+- **Agent Thông minh:** AI đóng vai trò là nhà tuyển dụng, đặt câu hỏi dựa trên CV của ứng viên và phản hồi tự nhiên theo thời gian thực.
+- **Đánh giá sau phỏng vấn:** Tự động lưu trữ đoạn hội thoại (transcript) và chạy luồng đánh giá chấm điểm kỹ năng của ứng viên sau khi kết thúc.
 
-**Frontend**
+### 4. Tự Động Hóa & Thông Báo
+- **Email Thông báo:** Tự động gửi email mời phỏng vấn hoặc cập nhật trạng thái ứng viên.
+- **Quản lý Hàng đợi (Queue):** Xử lý nền các tác vụ nặng như phân tích CV và đánh giá phỏng vấn bằng BullMQ.
 
-- React 18
-- Vite
-- TypeScript
-- Tailwind CSS
-- Zustand
-- React Router
-- Lucide icons
+---
 
-**Backend**
+## 🛠 Các Công Nghệ Nâng Cao Sử Dụng (Tech Stack)
 
-- NestJS
-- Prisma ORM
-- PostgreSQL with pgvector
-- Redis and BullMQ
-- MinIO/S3-compatible object storage
-- MailHog/Nodemailer
-- WebSocket gateway for realtime events
-- Gemini CV extraction with mock fallback for local development
+Dự án sử dụng kiến trúc Microservices kết hợp với các công nghệ tiên tiến nhất hiện nay:
 
-## Project Structure
+### Frontend
+- **Framework:** React 18, Vite, TypeScript.
+- **State Management:** Zustand.
+- **Styling:** Tailwind CSS, Lucide Icons.
+- **Real-time Media:** LiveKit Client SDK (WebRTC).
+
+### Backend (Core API)
+- **Framework:** NestJS (Node.js).
+- **Cơ sở dữ liệu:** PostgreSQL kết hợp **pgvector** (lưu trữ vector embeddings cho Semantic Search).
+- **ORM:** Prisma.
+- **Caching & Queue:** Redis & BullMQ.
+- **Object Storage:** MinIO (Tương thích Amazon S3) để lưu trữ CV.
+- **Email Server:** MailHog / Nodemailer.
+
+### AI & Voice Services (Python Worker)
+- **Framework:** FastAPI.
+- **AI/LLM Integration:** Langchain, Google Gemini / OpenAI API.
+- **Voice Agent:** LiveKit Python SDK để xử lý luồng WebRTC audio streaming và STT/TTS (Speech-to-Text / Text-to-Speech).
+
+### Infrastructure
+- **Containerization:** Docker & Docker Compose.
+
+---
+
+## 📂 Cấu Trúc Thư Mục (Project Structure)
 
 ```text
 HR-Bot/
-  backend/                 NestJS API, Prisma schema, workers, services
-  frontend/                React/Vite web app
-  docs/                    Project documentation and implementation tracking
-  docker-compose.yml       Local PostgreSQL, Redis, MinIO, MailHog, backend
-  README.md                Root setup and usage guide
+├── backend/                 # NestJS Core API, Prisma schema, Queue Workers
+├── frontend/                # React Vite Web App (Giao diện Quản trị & Ứng viên)
+├── ai-services/             # Python FastAPI & LiveKit Voice AI Agents
+├── docs/                    # Tài liệu dự án
+├── docker-compose.yml       # Cấu hình tự động triển khai DB, Redis, MinIO, LiveKit...
+└── LIVEKIT_README.md        # Hướng dẫn chi tiết cho dịch vụ Voice AI
 ```
 
-## Prerequisites
+---
 
-- Node.js 20+
-- npm 10+
-- pnpm 9+ for the frontend
-- Docker Desktop or Docker Engine
-- Git
-- Docker image support for pgvector, already provided by `docker-compose.yml`
+## 🚀 Hướng Dẫn Cài Đặt (Getting Started)
 
-## Quick Start
+### Yêu Cầu Hệ Thống (Prerequisites)
+- **Node.js** 20+
+- **Docker** và **Docker Compose**
+- **Git**
 
-### 1. Clone and install
-
+### 1. Khởi động các dịch vụ hạ tầng bằng Docker
+Lệnh này sẽ khởi động PostgreSQL, Redis, MinIO, MailHog, LiveKit Server và AI Services.
 ```bash
-git clone <repo-url>
-cd HR-Bot
+docker-compose up -d
 ```
 
-### 2. Create environment files
-
+### 2. Cài đặt và Chạy Backend
+Mở Terminal mới và thực hiện:
 ```bash
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
+cd backend
+npm install
+cp .env.example .env      # (Thiết lập biến môi trường)
+npx prisma generate       # (Tạo Prisma Client)
+npx prisma migrate dev    # (Khởi tạo Database)
+npm run start:dev         # (Chạy Backend tại cổng 3000)
 ```
 
-When running the backend directly on your machine while PostgreSQL and Redis run from Docker, make sure these values are set in `backend/.env`:
+### 3. Cài đặt và Chạy Frontend
+Mở Terminal mới và thực hiện:
+```bash
+cd frontend
+npm install
+cp .env.example .env      # (Thiết lập biến môi trường)
+npm run dev               # (Chạy Frontend tại cổng 5173)
+```
 
+---
+
+## ⚙ Biến Môi Trường Cơ Bản (Environment Variables)
+
+### Backend (`backend/.env`)
 ```env
 DATABASE_URL=postgresql://hrbot:hrbot@localhost:5433/hrbot?schema=public
 REDIS_HOST=localhost
@@ -96,283 +113,26 @@ REDIS_PORT=6380
 S3_ENDPOINT=http://localhost:9000
 MAIL_HOST=localhost
 MAIL_PORT=1025
-AI_PROVIDER=mock
+LIVEKIT_URL=http://localhost:7880
+LIVEKIT_API_KEY=devkey
+LIVEKIT_API_SECRET=devsecret
 ```
 
-For real CV extraction with Gemini, create a free API key in Google AI Studio, then set:
-
-```env
-AI_PROVIDER=gemini
-GEMINI_API_KEY=your_google_ai_studio_api_key
-GEMINI_MODEL=gemini-3.1-flash-lite
-GEMINI_EMBEDDING_MODEL=gemini-embedding-2
-```
-
-If `GEMINI_API_KEY` is set and `AI_PROVIDER` is omitted, the backend automatically uses Gemini. Without a Gemini key, the backend falls back to the mock parser so local development still works.
-
-For production, the backend requires `AI_PROVIDER=gemini` and `GEMINI_API_KEY`; startup fails if production is configured to use the mock parser.
-
-The frontend should point to the backend API:
-
+### Frontend (`frontend/.env`)
 ```env
 VITE_API_URL=http://localhost:3000/api
 ```
 
-### 3. Start local infrastructure
+---
 
-```bash
-docker compose up -d postgres redis minio mailhog
-```
+## 🔑 Tài Khoản Mặc Định (Default Credentials)
 
-Services exposed to your host machine:
+- **HR Admin Login:** `admin@hrbot.com` / `password`
+- **MinIO Console:** `http://localhost:9001` (User: `minioadmin` / Pass: `minioadmin`)
+- **MailHog UI:** `http://localhost:8025` (Xem email tự động được gửi từ hệ thống)
 
-- PostgreSQL: `localhost:5433`
-- Redis: `localhost:6380`
-- MinIO API: `http://localhost:9000`
-- MinIO Console: `http://localhost:9001`
-- MailHog UI: `http://localhost:8025`
+---
 
-### 4. Setup the backend database
-
-```bash
-cd backend
-npm install
-npm run prisma:generate
-npm run prisma:migrate
-npm run prisma:seed
-```
-
-The Prisma migrations create the pgvector extension and `candidate_embeddings` table used by semantic search.
-
-### 5. Run the backend
-
-```bash
-cd backend
-npm run start:dev
-```
-
-The API runs at:
-
-```text
-http://localhost:3000/api
-```
-
-Health check:
-
-```text
-http://localhost:3000/api/health
-```
-
-### 6. Run the frontend
-
-Open a second terminal:
-
-```bash
-cd frontend
-pnpm install
-pnpm dev
-```
-
-The app runs at:
-
-```text
-http://localhost:5173
-```
-
-## Running With Docker
-
-The compose file includes PostgreSQL, Redis, MinIO, MailHog, and the backend service.
-
-```bash
-docker compose up -d --build
-```
-
-The frontend is not included in `docker-compose.yml`; run it locally with:
-
-```bash
-cd frontend
-pnpm install
-pnpm dev
-```
-
-For first-time backend database setup, run migrations and seed from your host:
-
-```bash
-cd backend
-npm install
-npm run prisma:generate
-npm run prisma:migrate
-npm run prisma:seed
-```
-
-## Environment Variables
-
-Backend variables are documented in [backend/.env.example](backend/.env.example).
-
-Important local defaults:
-
-| Variable | Local value | Notes |
-| --- | --- | --- |
-| `DATABASE_URL` | `postgresql://hrbot:hrbot@localhost:5433/hrbot?schema=public` | Use `5433` when backend runs on host. |
-| `REDIS_HOST` | `localhost` | Use `redis` only inside Docker network. |
-| `REDIS_PORT` | `6380` | Use `6379` only inside Docker network. |
-| `S3_ENDPOINT` | `http://localhost:9000` | MinIO API endpoint. |
-| `MAIL_HOST` | `localhost` | MailHog SMTP host. |
-| `MAIL_PORT` | `1025` | MailHog SMTP port. |
-| `AI_PROVIDER` | `mock` or `gemini` | Use `gemini` for real CV extraction, `mock` for offline local development. |
-| `GEMINI_API_KEY` | empty | Required when `AI_PROVIDER=gemini`; create one at `https://aistudio.google.com/app/apikey`. |
-| `GEMINI_MODEL` | `gemini-3.1-flash-lite` | Gemini model used for CV extraction. |
-| `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-2` | Gemini model used for candidate semantic-search embeddings. |
-
-Frontend variables are documented in [frontend/.env.example](frontend/.env.example).
-
-## Useful Commands
-
-Backend:
-
-```bash
-cd backend
-npm run start:dev
-npm run build
-npm test
-npm run prisma:generate
-npm run prisma:migrate
-npm run prisma:seed
-```
-
-Frontend:
-
-```bash
-cd frontend
-pnpm dev
-pnpm build
-pnpm preview
-```
-
-Docker:
-
-```bash
-docker compose up -d postgres redis minio mailhog
-docker compose up -d --build backend
-docker compose logs -f backend
-docker compose down
-```
-
-## Default Accounts
-
-After seeding:
-
-| Role | Email | Password |
-| --- | --- | --- |
-| Admin | `admin@hrbot.com` | `password` |
-| Recruiter | `recruiter@hrbot.com` | `password` |
-
-## Main URLs
-
-| Service | URL |
-| --- | --- |
-| Frontend | `http://localhost:5173` |
-| Backend API | `http://localhost:3000/api` |
-| API health | `http://localhost:3000/api/health` |
-| MinIO console | `http://localhost:9001` |
-| MailHog | `http://localhost:8025` |
-
-## Key API Endpoints
-
-- `POST /api/auth/login`
-- `POST /api/auth/register`
-- `GET /api/auth/me`
-- `GET /api/campaigns`
-- `POST /api/campaigns`
-- `POST /api/campaigns/:id/application-form`
-- `GET /api/application-forms/public/:token`
-- `GET /api/candidates`
-- `GET /api/candidates/:id`
-- `POST /api/candidates/upload`
-- `POST /api/candidates/public/upload`
-- `PATCH /api/candidates/:id/stage`
-- `POST /api/candidates/score`
-- `GET /api/candidates/:id/report.pdf`
-- `GET /api/search/candidates?q=...`
-- `GET /api/interviews`
-- `POST /api/interviews`
-- `GET /api/interviews/public/:token`
-- `POST /api/interviews/public/:token/submit`
-- `GET /api/dashboard/summary`
-
-## Troubleshooting
-
-### Prisma authentication fails with `P1000`
-
-Check that the host port matches your runtime:
-
-- Backend on host: `localhost:5433`
-- Backend inside Docker: `postgres:5432`
-
-For host development, `backend/.env` should contain:
-
-```env
-DATABASE_URL=postgresql://hrbot:hrbot@localhost:5433/hrbot?schema=public
-```
-
-### Redis connection fails
-
-Use:
-
-```env
-REDIS_HOST=localhost
-REDIS_PORT=6380
-```
-
-when running backend on the host. Inside Docker, use `REDIS_HOST=redis` and `REDIS_PORT=6379`.
-
-### Public application links do not open
-
-Make sure the campaign is active and not expired. Public application URLs use:
-
-```text
-http://localhost:5173/apply/:token
-```
-
-### Emails are not visible
-
-Open MailHog:
-
-```text
-http://localhost:8025
-```
-
-### Semantic search returns no candidates
-
-Make sure the latest migrations have been applied:
-
-```bash
-cd backend
-npm run prisma:migrate
-```
-
-Gemini is used for CV extraction and candidate semantic-search embeddings when `AI_PROVIDER=gemini`. If you run with `AI_PROVIDER=mock`, embeddings are generated by the local mock fallback.
-
-### Gemini CV extraction does not run
-
-Check `backend/.env`:
-
-```env
-AI_PROVIDER=gemini
-GEMINI_API_KEY=your_google_ai_studio_api_key
-GEMINI_MODEL=gemini-3.1-flash-lite
-```
-
-Restart the backend after changing `.env`. If the key is missing, invalid, or quota-limited, the CV processing worker will fail the job and BullMQ will retry it according to the queue retry policy.
-
-<!-- ## Documentation
-
-- [Backend README](backend/README.md)
-- [Backend database design](docs/backend-database-design.md)
-- [Implementation status](docs/implementation-status.md) -->
-
-<!-- ## Current Notes
-
-- CV extraction and candidate embeddings support Gemini through `GEMINI_API_KEY`; screening and question generation still use local mock/heuristic logic.
-- Automated tests are intentionally behind feature work at the current project stage.
-- Some planned modules such as Talent Pool, full Admin UI, OAuth, and richer realtime UI are still tracked in `docs/implementation-status.md`. -->
+## 📄 Tài Liệu Tham Khảo (Documentation)
+- Xem chi tiết về thiết lập LiveKit trong [LIVEKIT.md](./LIVEKIT.md).
+- Kiến trúc API và Swagger có thể truy cập tại `http://localhost:3000/api/docs` khi backend đang chạy.

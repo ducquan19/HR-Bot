@@ -1,5 +1,5 @@
 // User & Auth Types
-export type UserRole = 'admin' | 'recruiter' | 'hiring_manager'
+export type UserRole = 'admin' | 'recruiter'
 
 export interface User {
   id: string
@@ -14,6 +14,7 @@ export interface User {
 export interface RecruitmentCampaign {
   id: string
   name: string
+  department?: string
   jobPositionId: string
   positions?: CampaignPositionSummary[]
   positionCount?: number
@@ -28,6 +29,27 @@ export interface RecruitmentCampaign {
   publicApplicationUrl?: string
   memberRole?: CampaignMemberRole
   members?: CampaignMember[]
+}
+
+export interface JobPosition {
+  id: string
+  title: string
+  description?: string
+  department?: string
+  seniority?: string
+  employmentType?: string
+  overview?: string
+  responsibilities?: string
+  requirements?: string | string[]
+  benefits?: string
+  skills: string[]
+  salary?: {
+    min: number
+    max: number
+    currency: string
+  }
+  createdBy?: string
+  createdAt?: string
 }
 
 export interface CampaignPositionSummary {
@@ -61,23 +83,7 @@ export interface CampaignMember {
   }
 }
 
-// Job Position Types
-export interface JobPosition {
-  id: string
-  title: string
-  description: string
-  requirements: string[]
-  skills: string[]
-  seniority: 'junior' | 'mid' | 'senior' | 'lead'
-  department: string
-  salary?: {
-    min: number
-    max: number
-    currency: string
-  }
-  createdBy: string
-  createdAt: string
-}
+
 
 // Candidate Types
 export type CandidateStage = 'applied' | 'screening' | 'virtual_interview' | 'hr_review' | 'test' | 'real_interview' | 'offer' | 'rejected'
@@ -98,6 +104,8 @@ export interface Candidate {
   gpa?: number
   experience: number // years
   campaignId?: string
+  campaignName?: string
+  positionName?: string
   applicationId?: string
   appliedAt: string
   updatedAt: string
@@ -190,10 +198,11 @@ export interface CandidateFilters {
   education?: string[]
   gpaMin?: number
   gpaMax?: number
-  stage?: CandidateStage
+  stage?: string
   scoreMin?: number
   scoreMax?: number
   search?: string
+  campaignId?: string
 }
 
 export interface SemanticCandidateResult extends Candidate {
@@ -216,6 +225,7 @@ export interface CandidateSearchPayload {
   scoreMin?: number
   scoreMax?: number
   limit?: number
+  campaignId?: string
 }
 
 // API Response Types

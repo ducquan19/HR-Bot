@@ -1,0 +1,20 @@
+{
+  "type": "coding",
+  "summary": "Applied project task for a mid/senior AI Engineer (Nguyen Minh Tuan). Mirrors the real job — the candidate may use the AI coding assistant and is judged on how well they direct it, structure the solution, and reason about trade-offs.",
+  "coding": {
+    "mode": "project",
+    "title": "Minimal RAG question-answering service",
+    "difficulty": "medium",
+    "statement": "Build a small FastAPI service exposing POST /ask that answers a question over a provided list of documents using retrieval-augmented generation.\n\nAcceptance criteria:\n- Chunk and index the documents on startup (in-memory is fine).\n- Retrieve the top-k relevant chunks for the question and ground the answer in them.\n- Return JSON: { \"answer\": str, \"sources\": list[str] }.\n- Handle an empty document set gracefully.\n\nYou MAY use the AI coding assistant. Explain your design choices in a short README section.",
+    "function_name": "ask",
+    "starter_code": "from fastapi import FastAPI\n\napp = FastAPI()\n\n\n@app.post(\"/ask\")\nasync def ask(question: str, documents: list[str]) -> dict:\n    ...\n",
+    "test_cases": [
+      {"label": "Grounded answer present", "inputs": ["What language is fast?", ["Python is great", "Rust is fast"]], "expected": "non-empty answer citing the Rust document"},
+      {"label": "Empty corpus handled", "inputs": ["anything", []], "expected": "graceful empty-source response, no crash"}
+    ],
+    "ai_assistant_enabled": true,
+    "allowed_resources": ["AI coding assistant", "Public package documentation", "Internet search"]
+  },
+  "cognitive": null,
+  "source": "mock"
+}

@@ -1,0 +1,80 @@
+{
+  "cooldown_seconds": 12,
+  "end_after": 5,
+  "interjections": {
+    "en": ["Hmm,", "Wait a second —", "Hold on —", "Hey —", "Wait a moment,", "Uh —", "Whoa,", "Hang on —"],
+    "vi": ["Ơ khoan,", "Khoan đã nào,", "Ơ,", "Ấy ấy,", "Đợi xíu,", "Ê này,", "Ủa,", "Hửm,"]
+  },
+  "reminders": {
+    "en": {
+      "secondary_monitor": [
+        "I can see a second monitor is connected. Please disconnect it now. This is a formal warning.",
+        "The second monitor is still on. This is your second warning — disconnect it immediately.",
+        "You have been warned multiple times about the second monitor. This is your final warning. Disconnect it now or the interview will be terminated."
+      ],
+      "tab_switch": [
+        "I notice you've navigated to another tab. Please return to the interview window immediately. This is a formal warning.",
+        "You've left the interview window again. This is your second warning — return now or this interview will be terminated.",
+        "You've been warned multiple times about leaving the interview window. This is your final warning. Return immediately or the interview ends now."
+      ],
+      "gaze_away": [
+        "I notice you're looking away from the camera. Please keep your eyes on the camera during the interview. This is a formal warning.",
+        "You've looked away again. This is your second warning — maintain eye contact with the camera or the interview will be terminated.",
+        "You've been warned multiple times about looking away. This is your final warning. Look at the camera now or the interview ends immediately."
+      ],
+      "multiple_faces": [
+        "I can see more than one person in the frame. Only the candidate should be visible. Please ask any other person to leave. This is a formal warning.",
+        "There's still a second person visible. This is your second warning — only you should be on camera or the interview will be terminated.",
+        "You've been warned multiple times about the second person in frame. This is your final warning. Remove them now or the interview ends immediately."
+      ],
+      "phone_detected": [
+        "I can see a phone on your screen. Please put it away. This is a formal warning.",
+        "The phone is still visible on screen. This is your second warning — put it away now or the interview will be terminated.",
+        "You've been warned multiple times about the phone. This is your final warning. Remove it now or the interview ends immediately."
+      ]
+    },
+    "vi": {
+      "secondary_monitor": [
+        "Ơ, mở màn hình thứ hai làm gì vậy? Câu hỏi dễ thôi mà, tắt bớt đi cho công bằng nào.",
+        "Vẫn thấy màn hình phụ đang cắm kìa. Khó tới mức phải mở thêm màn hình hả? Tháo ra giùm mình.",
+        "Màn hình phụ vẫn còn đó nha. Mình ghi nhận là vi phạm rồi đấy — tháo ngay, không là buổi phỏng vấn dừng tại đây."
+      ],
+      "tab_switch": [
+        "Tab kia có gì hay hơn câu hỏi của mình hả? Quay lại đây nào.",
+        "Lại nhảy sang tab khác rồi. Khó quá hay sao mà phải đi tìm phao thế? Ở yên cửa sổ này giùm.",
+        "Bạn cứ rời cửa sổ phỏng vấn hoài. Mình ghi nhận vi phạm rồi đó — dừng ngay, không là kết thúc luôn nha."
+      ],
+      "gaze_away": [
+        "Liếc đi đâu vậy? Đáp án có dán trên tường đâu, nhìn vào camera nào.",
+        "Vẫn còn nhìn ra ngoài kìa. Có ai nhắc bài ngoài đó hả? Hướng mặt vào camera giùm mình.",
+        "Bạn nhìn ra ngoài nhiều quá. Mình ghi nhận vi phạm rồi — tập trung vào camera, không là buổi phỏng vấn dừng nha."
+      ],
+      "multiple_faces": [
+        "Ơ, có thêm người nữa trong khung hình kìa. Phỏng vấn nhóm hồi nào vậy ta? Mời bạn kia ra ngoài giùm nha.",
+        "Vẫn còn hai người trong camera. Cần trợ thủ tới mức đó luôn hả? Chỉ mình bạn thôi nhé.",
+        "Vẫn có người thứ hai trong khung hình. Mình ghi nhận vi phạm rồi đó — chỉ còn mình bạn thôi, không là buổi phỏng vấn dừng nha."
+      ],
+      "phone_detected": [
+        "Cái điện thoại trên tay để tra Google hay gì đó? Cất giùm mình nha.",
+        "Vẫn thấy điện thoại trong khung hình kìa. Câu hỏi dễ mà, đâu cần phao — cất đi nào.",
+        "Điện thoại vẫn còn đó. Mình ghi nhận vi phạm rồi — cất ngay, không là buổi phỏng vấn dừng tại đây nha."
+      ]
+    }
+  },
+  "final_notice": {
+    "en": {
+      "secondary_monitor": "The second monitor is still connected after repeated warnings. I'm ending the interview here. Goodbye.",
+      "tab_switch": "You keep leaving the interview window despite repeated warnings. I'm ending the interview here. Goodbye.",
+      "gaze_away": "You've kept looking away despite repeated warnings. I'm ending the interview here. Goodbye.",
+      "multiple_faces": "There's still a second person in frame after repeated warnings. I'm ending the interview here. Goodbye.",
+      "phone_detected": "The phone is still out despite repeated warnings. I'm ending the interview here. Goodbye."
+    },
+    "vi": {
+      "secondary_monitor": "Màn hình phụ vẫn còn kết nối sau bao lần nhắc. Vậy mình xin dừng buổi phỏng vấn ở đây nhé. Tạm biệt.",
+      "tab_switch": "Bạn rời cửa sổ phỏng vấn hoài dù đã được nhắc nhiều lần. Mình kết thúc buổi phỏng vấn tại đây. Tạm biệt.",
+      "gaze_away": "Bạn nhìn ra ngoài hoài dù đã được nhắc nhiều lần. Mình kết thúc buổi phỏng vấn tại đây. Tạm biệt.",
+      "multiple_faces": "Vẫn còn người thứ hai trong khung hình dù đã nhắc nhiều lần. Mình kết thúc buổi phỏng vấn tại đây. Tạm biệt.",
+      "phone_detected": "Điện thoại vẫn còn đó dù đã được nhắc nhiều lần. Mình kết thúc buổi phỏng vấn tại đây. Tạm biệt."
+    }
+  }
+}

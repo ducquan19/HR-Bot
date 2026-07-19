@@ -22,7 +22,7 @@ export class InterviewsService {
 
   async findAll() {
     const sessions = await this.prisma.interviewSession.findMany({
-      include: { application: { include: { candidateProfile: true } }, questions: true },
+      include: { application: { include: { candidateProfile: true, campaignPosition: true } }, questions: true },
       orderBy: { createdAt: 'desc' },
     });
     return sessions.map((s) => this.toFrontendInterview(s));
@@ -71,6 +71,13 @@ export class InterviewsService {
     const session = await this.prisma.interviewSession.update({ where: { id }, data: { status } });
     if (status === 'COMPLETED') await this.interviewQueue.add('evaluate-interview', { sessionId: id });
     return session;
+  }
+
+  async remove(id: string) {
+    const session = await this.prisma.interviewSession.findUnique({ where: { id } });
+    if (!session) throw new NotFoundException('Interview not found');
+    await this.prisma.interviewSession.delete({ where: { id } });
+    return { id };
   }
 
   async findPublic(token: string) {
@@ -126,7 +133,7 @@ export class InterviewsService {
       scheduledAt: (session.scheduledAt ?? session.createdAt).toISOString(),
       interviewLink: session.meetingUrl,
       status: session.status.toLowerCase(),
-      campaignId: undefined,
+      campaignId: session.application?.campaignPosition?.campaignId,
       createdBy: session.createdById,
       createdAt: session.createdAt.toISOString(),
     };

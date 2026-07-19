@@ -1,0 +1,25 @@
+mcp[cli]>=1.27
+httpx==0.28.1
+pydantic-settings==2.14.1
+PyYAML==6.0.3
+agent-framework
+fastapi
+uvicorn[standard]
+openai
+
+# Interview TTS — Vietnamese text normalization (numbers/dates/units + acronym
+# tagging) before synthesis. See app/infra/tts/__init__.py.
+sea-g2p==0.7.6
+
+# Judge Agent — báo cáo đánh giá: markdown → PDF (thuần Python, không cần system lib)
+markdown==3.7
+fpdf2==2.8.7
+# Judge Agent — biểu đồ report (radar/gauge/bar). matplotlib dùng backend Agg
+# (headless), kéo theo numpy/pillow.
+matplotlib==3.9.2
+
+# Interview worker — LiveKit Agents (STT/LLM/TTS cascade + MCP client)
+livekit-agents[openai,silero,turn-detector,mcp]~=1.5
+
+# Monitoring: OpenTelemetry exporter → Arize Phoenix UI
+opentelemetry-exporter-otlp-proto-http

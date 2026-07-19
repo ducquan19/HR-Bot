@@ -1,0 +1,57 @@
+{
+  "summary": "15-minute conversational screen for a Senior Backend Engineer. Focus on API design, data modelling, concurrency, and operational maturity.",
+  "duration_minutes": 15,
+  "competencies": [
+    {
+      "name": "API & system design",
+      "weight": 0.4,
+      "description": "Designing clear, evolvable HTTP/service APIs and their data flow."
+    },
+    {
+      "name": "Data modelling & databases",
+      "weight": 0.3,
+      "description": "Schema design, indexing, transactions, consistency trade-offs."
+    },
+    {
+      "name": "Concurrency & reliability",
+      "weight": 0.2,
+      "description": "Async, locking, idempotency, failure handling."
+    },
+    {
+      "name": "Communication",
+      "weight": 0.1,
+      "description": "Explaining trade-offs and reasoning clearly."
+    }
+  ],
+  "interview_topics": [
+    {
+      "title": "API design",
+      "questions": [
+        "Design the API for a job-application service. What are the core endpoints and resources?",
+        "How would you evolve that API without breaking existing clients?"
+      ]
+    },
+    {
+      "title": "Data modelling",
+      "questions": [
+        "How would you model the schema behind that service?",
+        "Where would you add indexes, and what consistency guarantees matter here?"
+      ]
+    },
+    {
+      "title": "Concurrency & reliability",
+      "questions": [
+        "Two requests try to submit the same application at once — how do you keep it correct?",
+        "How do you make a write endpoint safely retryable?"
+      ]
+    }
+  ],
+  "coding_assignment": null,
+  "inspector_criteria": [
+    "Soundness of API and data-model decisions",
+    "Handling of concurrency and idempotency",
+    "Operational/reliability awareness",
+    "Clarity of communication"
+  ],
+  "source": "mock"
+}

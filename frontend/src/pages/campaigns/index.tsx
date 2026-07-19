@@ -6,16 +6,17 @@ import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { Alert } from '@/components/ui/alert'
 import { Select } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { useCampaignsStore } from '@/stores/campaigns-store'
 import { useCandidatesStore } from '@/stores/candidates-store'
+import { CampaignModal } from './CampaignModal'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
-import { Plus, Archive, Trash2, Eye, Calendar, Users, TrendingUp, Copy, ExternalLink, RotateCcw } from 'lucide-react'
-import type { CampaignMember, CampaignMemberRole, CampaignPositionSummary, User } from '@/types'
+import { Plus, Archive, Trash2, Eye, Calendar, Users, TrendingUp, RotateCcw } from 'lucide-react'
+import type { CampaignMember, CampaignMemberRole, CampaignPositionSummary, User, JobPosition } from '@/types'
 
 interface CampaignFormPosition {
+  positionId?: string
   title: string
   department: string
   employmentType: string
@@ -34,10 +35,10 @@ interface PositionEditForm {
 }
 
 const employmentTypeOptions = [
-  { value: 'full_time', label: 'Full-time' },
-  { value: 'part_time', label: 'Part-time' },
-  { value: 'contract', label: 'Contract' },
-  { value: 'internship', label: 'Internship' },
+  { value: 'full_time', label: 'Toàn thời gian' },
+  { value: 'part_time', label: 'Bán thời gian' },
+  { value: 'contract', label: 'Hợp đồng' },
+  { value: 'internship', label: 'Thực tập' },
 ]
 
 const toBackendEmploymentType = (value: string) => value.toUpperCase()
@@ -82,21 +83,34 @@ export function CampaignsPage() {
   const [positionEditForm, setPositionEditForm] = useState<PositionEditForm | null>(null)
   const [isSavingPosition, setIsSavingPosition] = useState(false)
   const [isAddingPosition, setIsAddingPosition] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const [formData, setFormData] = useState({
     name: '',
     department: '',
     endDate: '',
     positions: [createEmptyPosition()],
   })
+  const [allJobPositions, setAllJobPositions] = useState<JobPosition[]>([])
+
+  // Edit Campaign State
+  const [activeTab, setActiveTab] = useState<'overview' | 'positions' | 'members'>('overview')
+  const [isEditingCampaign, setIsEditingCampaign] = useState(false)
+  const [isSavingCampaign, setIsSavingCampaign] = useState(false)
+  const [campaignEditForm, setCampaignEditForm] = useState({ name: '', department: '', endDate: '' })
+
+  const isAdmin = currentUser?.role === 'admin'
 
   useEffect(() => {
     loadCampaigns().catch((err) => setError(err instanceof Error ? err.message : 'Could not load campaigns'))
+    api.campaigns.jobPositions().then(setAllJobPositions).catch(console.error)
   }, [loadCampaigns])
 
   useEffect(() => {
     if (!selectedCampaign) {
       setMembers([])
       cancelEditPosition()
+      setIsEditingCampaign(false)
+      setActiveTab('overview')
       return
     }
     setIsMembersLoading(true)
@@ -123,11 +137,12 @@ export function CampaignsPage() {
         deadline: new Date(`${formData.endDate}T23:59:59`).toISOString(),
         department: formData.department || undefined,
         positions: positions.map((position) => ({
+          positionId: position.positionId || undefined,
           title: position.title.trim(),
           department: position.department.trim() || formData.department || undefined,
           employmentType: toBackendEmploymentType(position.employmentType),
           vacancies: Number(position.vacancies) || 1,
-          jd: {
+          jd: position.positionId ? undefined : {
             overview: `Recruitment campaign for ${position.title.trim()}.`,
             responsibilities: 'Review applications, screen candidates, and coordinate interviews.',
             requirements: 'Requirements will be refined by the recruiting team.',
@@ -176,6 +191,12 @@ export function CampaignsPage() {
 
   const activeCampaigns = campaigns.filter((campaign) => campaign.status === 'active')
   const archivedCampaigns = campaigns.filter((campaign) => campaign.status !== 'active')
+
+  const filteredActiveCampaigns = activeCampaigns.filter(c =>
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.department?.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
   const selectedCampaignDetail = campaigns.find((campaign) => campaign.id === selectedCampaign)
   const publicApplicationLink = selectedCampaignDetail?.publicApplicationUrl
     ? `${window.location.origin}${selectedCampaignDetail.publicApplicationUrl}`
@@ -326,16 +347,45 @@ export function CampaignsPage() {
     }
   }
 
+  const startEditCampaign = () => {
+    if (!selectedCampaignDetail) return
+    setCampaignEditForm({
+      name: selectedCampaignDetail.name,
+      department: (selectedCampaignDetail as any).department || '',
+      endDate: selectedCampaignDetail.endDate.split('T')[0],
+    })
+    setIsEditingCampaign(true)
+  }
+
+  const handleSaveCampaign = async () => {
+    if (!selectedCampaign || !campaignEditForm.name.trim() || !campaignEditForm.endDate) return
+    setIsSavingCampaign(true)
+    try {
+      await updateCampaign(selectedCampaign, {
+        name: campaignEditForm.name.trim(),
+        department: campaignEditForm.department.trim() || undefined,
+        endDate: new Date(`${campaignEditForm.endDate}T23:59:59`).toISOString(),
+      })
+      await loadCampaigns()
+      setIsEditingCampaign(false)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update campaign')
+    } finally {
+      setIsSavingCampaign(false)
+    }
+  }
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Recruitment Campaigns</h1>
-          <p className="text-muted-foreground">Manage your recruitment campaigns and job postings</p>
+          <h1 className="text-3xl font-bold mb-2">Quản lý chiến dịch</h1>
+          <p className="text-muted-foreground">Quản lý các chiến dịch tuyển dụng và vị trí công việc</p>
         </div>
         <Button onClick={() => setIsModalOpen(true)} className="gap-2">
           <Plus className="w-4 h-4" />
-          New Campaign
+          Tạo chiến dịch
         </Button>
       </div>
 
@@ -345,68 +395,80 @@ export function CampaignsPage() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Campaigns</CardTitle>
-            <TrendingUp className="w-4 h-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{activeCampaigns.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Currently recruiting</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Candidates</CardTitle>
-            <Users className="w-4 h-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{candidates.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Across all campaigns</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Archived</CardTitle>
-            <Archive className="w-4 h-4 text-orange-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{archivedCampaigns.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Closed campaigns</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5 flex items-center justify-between transition-all hover:shadow-md">
+          <div>
+            <p className="text-sm font-semibold text-gray-500 mb-1">Đang hoạt động</p>
+            <div className="text-3xl font-black text-gray-900">{activeCampaigns.length}</div>
+            <p className="text-[11px] text-gray-400 mt-1 font-medium">Chiến dịch đang mở</p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center border border-blue-100">
+            <TrendingUp className="w-6 h-6 text-blue-600" />
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5 flex items-center justify-between transition-all hover:shadow-md">
+          <div>
+            <p className="text-sm font-semibold text-gray-500 mb-1">Tổng ứng viên</p>
+            <div className="text-3xl font-black text-gray-900">{candidates.length}</div>
+            <p className="text-[11px] text-gray-400 mt-1 font-medium">Trong tất cả chiến dịch</p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center border border-purple-100">
+            <Users className="w-6 h-6 text-purple-600" />
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5 flex items-center justify-between transition-all hover:shadow-md">
+          <div>
+            <p className="text-sm font-semibold text-gray-500 mb-1">Đã đóng</p>
+            <div className="text-3xl font-black text-gray-900">{archivedCampaigns.length}</div>
+            <p className="text-[11px] text-gray-400 mt-1 font-medium">Chiến dịch lưu trữ</p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center border border-orange-100">
+            <Archive className="w-6 h-6 text-orange-600" />
+          </div>
+        </div>
       </div>
 
       <div className="mb-8">
-        <h2 className="text-xl font-bold mb-4">Active Campaigns</h2>
+        <div className="flex flex-col sm:flex-row items-center mb-6 gap-6 relative">
+          <h2 className="text-xl font-bold whitespace-nowrap">Chiến dịch đang hoạt động</h2>
+          <div className="w-full sm:w-[400px] sm:absolute sm:left-1/2 sm:-translate-x-1/2">
+            <Input
+              placeholder="Tìm kiếm theo tên chiến dịch hoặc phòng ban..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-10 text-sm bg-white shadow-sm"
+            />
+          </div>
+        </div>
         {isLoading ? (
           <Card>
-            <CardContent className="py-12 text-center text-muted-foreground">Loading campaigns...</CardContent>
+            <CardContent className="py-12 text-center text-muted-foreground">Đang tải dữ liệu...</CardContent>
           </Card>
-        ) : activeCampaigns.length === 0 ? (
-          <Alert variant="info" title="No Active Campaigns">
-            Create a new recruitment campaign to get started.
+        ) : filteredActiveCampaigns.length === 0 ? (
+          <Alert variant="info" title="Không tìm thấy chiến dịch">
+            {searchQuery ? 'Không có chiến dịch nào phù hợp với tìm kiếm của bạn.' : 'Hãy tạo một chiến dịch tuyển dụng mới để bắt đầu.'}
           </Alert>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {activeCampaigns.map((campaign) => (
+            {filteredActiveCampaigns.map((campaign) => (
               <Card key={campaign.id} className="hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
                       <CardTitle className="mb-2">{campaign.name}</CardTitle>
                       <p className="text-sm text-muted-foreground mb-2">
-                        {campaign.positionCount ?? campaign.positions?.length ?? 0} positions
+                        {campaign.positionCount ?? campaign.positions?.length ?? 0} vị trí
                       </p>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Users className="w-4 h-4" />
-                          {getCandidateCount(campaign.id)} candidates
+                          {getCandidateCount(campaign.id)} ứng viên
                         </div>
                         <div className="flex items-center gap-1">
                           <Calendar className="w-4 h-4" />
-                          Ends {formatDate(campaign.endDate)}
+                          Kết thúc {formatDate(campaign.endDate)}
                         </div>
                       </div>
                     </div>
@@ -415,13 +477,13 @@ export function CampaignsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setSelectedCampaign(campaign.id)} className="gap-1">
-                      <Eye className="w-4 h-4" />
-                      View
+                    <Button variant="outline" size="sm" onClick={() => setSelectedCampaign(campaign.id)}>
+                      <Eye className="w-4 h-4 mr-2" />
+                      Chi tiết
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => handleArchive(campaign.id)} className="gap-1">
                       <Archive className="w-4 h-4" />
-                      Archive
+                      Lưu trữ
                     </Button>
                     <Button
                       variant="outline"
@@ -430,7 +492,7 @@ export function CampaignsPage() {
                       className="gap-1 text-red-600 hover:text-red-700"
                     >
                       <Trash2 className="w-4 h-4" />
-                      Delete
+                      Xóa
                     </Button>
                   </div>
                 </CardContent>
@@ -442,32 +504,30 @@ export function CampaignsPage() {
 
       {archivedCampaigns.length > 0 && (
         <div>
-          <h2 className="text-xl font-bold mb-4">Archived Campaigns</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <h2 className="text-xl font-bold mb-4">Chiến dịch Lưu trữ</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {archivedCampaigns.map((campaign) => (
-              <Card key={campaign.id} className="opacity-75">
+              <Card key={campaign.id} className="opacity-75 bg-gray-50 border-dashed">
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
-                      <CardTitle className="mb-2">{campaign.name}</CardTitle>
+                      <CardTitle className="mb-2 text-gray-700">{campaign.name}</CardTitle>
                       <p className="text-sm text-muted-foreground mb-2">
-                        {campaign.positionCount ?? campaign.positions?.length ?? 0} positions
+                        {campaign.positionCount ?? campaign.positions?.length ?? 0} vị trí
                       </p>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Users className="w-4 h-4" />
-                          {getCandidateCount(campaign.id)} candidates
-                        </div>
-                      </div>
                     </div>
-                    <Badge variant="secondary">Archived</Badge>
+                    <Badge variant="secondary">Đã đóng</Badge>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setSelectedCampaign(campaign.id)}>
+                      <Eye className="w-4 h-4 mr-2" />
+                      Chi tiết
+                    </Button>
                     <Button variant="outline" size="sm" onClick={() => handleActivate(campaign.id)} className="gap-1">
                       <RotateCcw className="w-4 h-4" />
-                      Activate
+                      Mở lại
                     </Button>
                     <Button
                       variant="outline"
@@ -476,7 +536,7 @@ export function CampaignsPage() {
                       className="gap-1 text-red-600 hover:text-red-700"
                     >
                       <Trash2 className="w-4 h-4" />
-                      Delete
+                      Xóa
                     </Button>
                   </div>
                 </CardContent>
@@ -489,67 +549,93 @@ export function CampaignsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Create New Campaign"
+        title="Tạo chiến dịch mới"
         className="max-w-3xl"
         footer={
           <>
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
-              Cancel
+              Hủy
             </Button>
             <Button onClick={handleCreateCampaign} isLoading={isLoading}>
-              Create Campaign
+              Tạo mới
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <Input
-            label="Campaign Name"
-            placeholder="e.g., Senior React Developer - Q3 2026"
+            label="Tên chiến dịch"
+            placeholder="VD: Tuyển dụng lập trình viên React - Quý 3 2026"
             value={formData.name}
             onChange={(event) => setFormData({ ...formData, name: event.target.value })}
           />
           <Input
-            label="Department"
-            placeholder="e.g., Engineering"
+            label="Phòng ban"
+            placeholder="VD: Kỹ thuật"
             value={formData.department}
             onChange={(event) => setFormData({ ...formData, department: event.target.value })}
           />
           <Input
-            label="End Date"
+            label="Ngày kết thúc"
             type="date"
             value={formData.endDate}
             onChange={(event) => setFormData({ ...formData, endDate: event.target.value })}
           />
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Job Positions</label>
+              <label className="text-sm font-medium">Vị trí tuyển dụng</label>
               <Button type="button" variant="outline" size="sm" onClick={addFormPosition} className="gap-1">
                 <Plus className="w-4 h-4" />
-                Add
+                Thêm
               </Button>
             </div>
             {formData.positions.map((position, index) => (
               <div key={index} className="grid grid-cols-1 gap-3 rounded-md border border-border p-3 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <Select
+                    value={position.positionId || ''}
+                    options={[
+                      { value: '', label: '-- Tạo vị trí mới --' },
+                      ...allJobPositions.map(p => ({ value: p.id, label: `${p.title}${p.department ? ` (${p.department})` : ''}` }))
+                    ]}
+                    onChange={(event) => {
+                      const posId = event.target.value
+                      if (!posId) {
+                        updateFormPosition(index, { positionId: '', title: '', department: '' })
+                      } else {
+                        const jobPos = allJobPositions.find(p => p.id === posId)
+                        if (jobPos) {
+                          updateFormPosition(index, {
+                            positionId: jobPos.id,
+                            title: jobPos.title,
+                            department: jobPos.department || '',
+                            employmentType: jobPos.employmentType?.toLowerCase() || 'full_time',
+                          })
+                        }
+                      }
+                    }}
+                  />
+                </div>
                 <Input
-                  placeholder="Position title"
+                  placeholder="Tên vị trí"
                   value={position.title}
-                  onChange={(event) => updateFormPosition(index, { title: event.target.value })}
+                  onChange={(event) => updateFormPosition(index, { title: event.target.value, positionId: '' })}
                 />
                 <Input
-                  placeholder="Department"
+                  placeholder="Phòng ban"
                   value={position.department}
-                  onChange={(event) => updateFormPosition(index, { department: event.target.value })}
+                  onChange={(event) => updateFormPosition(index, { department: event.target.value, positionId: '' })}
                 />
                 <Select
                   value={position.employmentType}
                   options={employmentTypeOptions}
-                  onChange={(event) => updateFormPosition(index, { employmentType: event.target.value })}
+                  onChange={(event) => updateFormPosition(index, { employmentType: event.target.value, positionId: '' })}
                 />
                 <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 md:col-span-2">
                   <Input
                     type="number"
                     min={1}
+                    placeholder="Số lượng tuyển"
                     value={position.vacancies}
                     onChange={(event) => updateFormPosition(index, { vacancies: Number(event.target.value) || 1 })}
                   />
@@ -570,283 +656,47 @@ export function CampaignsPage() {
         </div>
       </Modal>
 
-      <Modal
-        isOpen={!!selectedCampaignDetail}
-        onClose={() => setSelectedCampaign(null)}
-        title={selectedCampaignDetail?.name || 'Campaign'}
-        className="max-w-4xl"
-      >
-        {selectedCampaignDetail && (
-          <div className="space-y-4 text-sm">
-            <div><span className="text-muted-foreground">Status:</span> {selectedCampaignDetail.status}</div>
-            <div><span className="text-muted-foreground">Deadline:</span> {formatDate(selectedCampaignDetail.endDate)}</div>
-            <div><span className="text-muted-foreground">Candidates:</span> {getCandidateCount(selectedCampaignDetail.id)}</div>
-            <div className="border-t border-border pt-4">
-              <div className="flex items-center justify-between mb-3">
-                <p className="font-medium">Positions</p>
-                {canEditPositions && (
-                  <Button variant="outline" size="sm" onClick={startAddPosition} className="gap-1">
-                    <Plus className="w-4 h-4" />
-                    Add Position
-                  </Button>
-                )}
-              </div>
-              <div className="space-y-2">
-                {isAddingPosition && positionEditForm && (
-                  <div className="rounded-md border border-border p-3">
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <Input
-                          label="Title"
-                          value={positionEditForm.title}
-                          onChange={(event) => updatePositionEditForm({ title: event.target.value })}
-                        />
-                        <Input
-                          label="Department"
-                          value={positionEditForm.department}
-                          onChange={(event) => updatePositionEditForm({ department: event.target.value })}
-                        />
-                        <Select
-                          label="Employment Type"
-                          value={positionEditForm.employmentType}
-                          options={employmentTypeOptions}
-                          onChange={(event) => updatePositionEditForm({ employmentType: event.target.value })}
-                        />
-                        <Input
-                          className="md:max-w-40"
-                          label="Vacancies"
-                          type="number"
-                          min={1}
-                          value={positionEditForm.vacancies}
-                          onChange={(event) => updatePositionEditForm({ vacancies: Number(event.target.value) || 1 })}
-                        />
-                      </div>
-                      <Textarea
-                        label="Overview"
-                        rows={3}
-                        value={positionEditForm.overview}
-                        onChange={(event) => updatePositionEditForm({ overview: event.target.value })}
-                      />
-                      <Textarea
-                        label="Responsibilities"
-                        rows={4}
-                        value={positionEditForm.responsibilities}
-                        onChange={(event) => updatePositionEditForm({ responsibilities: event.target.value })}
-                      />
-                      <Textarea
-                        label="Requirements"
-                        rows={5}
-                        value={positionEditForm.requirements}
-                        onChange={(event) => updatePositionEditForm({ requirements: event.target.value })}
-                      />
-                      <Textarea
-                        label="Benefits"
-                        rows={3}
-                        value={positionEditForm.benefits}
-                        onChange={(event) => updatePositionEditForm({ benefits: event.target.value })}
-                      />
-                      <div className="flex justify-end gap-2">
-                        <Button variant="outline" size="sm" onClick={cancelEditPosition}>
-                          Cancel
-                        </Button>
-                        <Button size="sm" onClick={handleAddPosition} isLoading={isSavingPosition}>
-                          Save Position
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {selectedCampaignDetail.positions?.map((position) => (
-                  <div key={position.id} className="rounded-md border border-border p-3">
-                    {editingPositionId === position.id && positionEditForm ? (
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                          <Input
-                            label="Title"
-                            value={positionEditForm.title}
-                            onChange={(event) => updatePositionEditForm({ title: event.target.value })}
-                          />
-                          <Input
-                            label="Department"
-                            value={positionEditForm.department}
-                            onChange={(event) => updatePositionEditForm({ department: event.target.value })}
-                          />
-                          <Select
-                            label="Employment Type"
-                            value={positionEditForm.employmentType}
-                            options={employmentTypeOptions}
-                            onChange={(event) => updatePositionEditForm({ employmentType: event.target.value })}
-                          />
-                          <Input
-                            className="md:max-w-40"
-                            label="Vacancies"
-                            type="number"
-                            min={1}
-                            value={positionEditForm.vacancies}
-                            onChange={(event) => updatePositionEditForm({ vacancies: Number(event.target.value) || 1 })}
-                          />
-                        </div>
-                        <Textarea
-                          label="Overview"
-                          rows={3}
-                          value={positionEditForm.overview}
-                          onChange={(event) => updatePositionEditForm({ overview: event.target.value })}
-                        />
-                        <Textarea
-                          label="Responsibilities"
-                          rows={4}
-                          value={positionEditForm.responsibilities}
-                          onChange={(event) => updatePositionEditForm({ responsibilities: event.target.value })}
-                        />
-                        <Textarea
-                          label="Requirements"
-                          rows={5}
-                          value={positionEditForm.requirements}
-                          onChange={(event) => updatePositionEditForm({ requirements: event.target.value })}
-                        />
-                        <Textarea
-                          label="Benefits"
-                          rows={3}
-                          value={positionEditForm.benefits}
-                          onChange={(event) => updatePositionEditForm({ benefits: event.target.value })}
-                        />
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm" onClick={cancelEditPosition}>
-                            Cancel
-                          </Button>
-                          <Button size="sm" onClick={() => handleSavePosition(position.id)} isLoading={isSavingPosition}>
-                            Save
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="font-medium truncate">{position.title}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {[position.department, position.seniority, position.employmentType].filter(Boolean).join(' - ') || 'No department'}
-                            </p>
-                          </div>
-                          <div className="flex flex-shrink-0 items-center gap-2">
-                            <Badge variant="secondary">{position.candidateCount} candidates</Badge>
-                            {canEditPositions && (
-                              <Button variant="outline" size="sm" onClick={() => startEditPosition(position)}>
-                                Edit
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        <p className="mt-2 text-xs text-muted-foreground">Vacancies: {position.vacancies}</p>
-                        {position.overview && (
-                          <div className="mt-3">
-                            <p className="text-xs font-medium mb-1">Overview</p>
-                            <p className="text-xs text-muted-foreground whitespace-pre-wrap">{position.overview}</p>
-                          </div>
-                        )}
-                        {position.responsibilities && (
-                          <div className="mt-3">
-                            <p className="text-xs font-medium mb-1">Responsibilities</p>
-                            <p className="text-xs text-muted-foreground whitespace-pre-wrap">{position.responsibilities}</p>
-                          </div>
-                        )}
-                        {position.requirements && (
-                          <div className="mt-3">
-                            <p className="text-xs font-medium mb-1">Requirements</p>
-                            <p className="text-xs text-muted-foreground whitespace-pre-wrap">{position.requirements}</p>
-                          </div>
-                        )}
-                        {position.benefits && (
-                          <div className="mt-3">
-                            <p className="text-xs font-medium mb-1">Benefits</p>
-                            <p className="text-xs text-muted-foreground whitespace-pre-wrap">{position.benefits}</p>
-                          </div>
-                        )}
-                        {position.skills.length > 0 && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {position.skills.map((skill) => <Badge key={skill} variant="secondary">{skill}</Badge>)}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                ))}
-                {!selectedCampaignDetail.positions?.length && <p className="text-sm text-muted-foreground">No positions linked to this campaign.</p>}
-              </div>
-            </div>
-            {publicApplicationLink && (
-              <div>
-                <p className="font-medium mb-2">Public application link</p>
-                <div className="flex gap-2">
-                  <Input readOnly value={publicApplicationLink} />
-                  <Button variant="outline" onClick={() => navigator.clipboard.writeText(publicApplicationLink)} title="Copy link">
-                    <Copy className="w-4 h-4" />
-                  </Button>
-                  <Button variant="outline" onClick={() => window.open(publicApplicationLink, '_blank')} title="Open link">
-                    <ExternalLink className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-            <div className="border-t border-border pt-4">
-              <div className="flex items-center justify-between mb-3">
-                <p className="font-medium">Campaign Team</p>
-                {isMembersLoading && <span className="text-xs text-muted-foreground">Loading...</span>}
-              </div>
-              <div className="space-y-2">
-                {members.map((member) => {
-                  const memberUser = getMemberUser(member)
-                  const isCreator = member.userId === selectedCampaignDetail.createdBy
-                  return (
-                    <div key={member.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md border border-border p-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium truncate">{memberUser?.name || memberUser?.email || member.userId}</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {[memberUser?.email, isCreator ? 'Creator' : undefined].filter(Boolean).join(' - ')}
-                        </p>
-                      </div>
-                      {canManageMembers && !isCreator ? (
-                        <div className="w-32">
-                          <Select
-                            value={member.role}
-                            options={memberRoleOptions}
-                            onChange={(event) => handleUpdateMemberRole(member.id, event.target.value)}
-                          />
-                        </div>
-                      ) : (
-                        <Badge variant="secondary">{isCreator ? 'owner' : member.role}</Badge>
-                      )}
-                      {canManageMembers && !isCreator && (
-                        <Button variant="outline" size="sm" onClick={() => handleRemoveMember(member.id)} className="text-red-600">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  )
-                })}
-                {members.length === 0 && <p className="text-sm text-muted-foreground">No campaign members yet.</p>}
-              </div>
-              {canManageMembers && (
-                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px_auto]">
-                  <Select
-                    value={newMemberUserId}
-                    options={[{ value: '', label: 'Select user' }, ...availableMemberOptions]}
-                    onChange={(event) => setNewMemberUserId(event.target.value)}
-                  />
-                  <Select
-                    value={newMemberRole}
-                    options={memberRoleOptions}
-                    onChange={(event) => setNewMemberRole(event.target.value as CampaignMemberRole)}
-                  />
-                  <Button onClick={handleAddMember} disabled={!newMemberUserId}>
-                    Add
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </Modal>
+      <CampaignModal
+        selectedCampaignDetail={selectedCampaignDetail || null}
+        setSelectedCampaign={setSelectedCampaign}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab as any}
+        isEditingCampaign={isEditingCampaign}
+        setIsEditingCampaign={setIsEditingCampaign}
+        campaignEditForm={campaignEditForm}
+        setCampaignEditForm={setCampaignEditForm}
+        handleSaveCampaign={handleSaveCampaign}
+        isSavingCampaign={isSavingCampaign}
+        isAdmin={isAdmin}
+        canEditPositions={canEditPositions}
+        canManageMembers={canManageMembers}
+        getCandidateCount={getCandidateCount}
+        publicApplicationLink={publicApplicationLink}
+        startEditCampaign={startEditCampaign}
+        startAddPosition={startAddPosition}
+        isAddingPosition={isAddingPosition}
+        positionEditForm={positionEditForm}
+        updatePositionEditForm={updatePositionEditForm}
+        employmentTypeOptions={employmentTypeOptions}
+        cancelEditPosition={cancelEditPosition}
+        handleAddPosition={handleAddPosition}
+        isSavingPosition={isSavingPosition}
+        editingPositionId={editingPositionId}
+        startEditPosition={startEditPosition}
+        handleSavePosition={handleSavePosition}
+        isMembersLoading={isMembersLoading}
+        members={members}
+        getMemberUser={getMemberUser}
+        memberRoleOptions={memberRoleOptions}
+        handleUpdateMemberRole={handleUpdateMemberRole}
+        handleRemoveMember={handleRemoveMember}
+        newMemberUserId={newMemberUserId}
+        setNewMemberUserId={setNewMemberUserId}
+        availableMemberOptions={availableMemberOptions}
+        newMemberRole={newMemberRole}
+        setNewMemberRole={setNewMemberRole as any}
+        handleAddMember={handleAddMember}
+      />
     </div>
   )
 }

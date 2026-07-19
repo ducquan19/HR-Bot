@@ -66,6 +66,30 @@ services:
       minio:
         condition: service_started
 
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: hrbot-livekit
+    command: --dev
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+
+  ai-services:
+    build: ./ai-services
+    container_name: hrbot-ai-services
+    env_file:
+      - ./ai-services/.env
+    environment:
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: devsecret
+      BACKEND_URL: http://backend:3000
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      - livekit
+      - backend
+
 volumes:
   postgres_data:
   redis_data:
