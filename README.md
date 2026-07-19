@@ -141,15 +141,15 @@ flowchart TD
     C -->|Học vấn| E["Tính điểm Học vấn (Degree/GPA)"]
     C -->|Kỹ năng| F["So khớp Kỹ năng (Semantic Matching)"]
 
-    subgraph Semantic Matching [Xử lý Vector]
+    subgraph SemanticMatching [Xử lý Vector]
         F1["Kỹ năng Ứng viên"] -->|Embedding| V1[("(Vector 1)")]
         F2["Kỹ năng Yêu cầu từ JD"] -->|Embedding| V2[("(Vector 2)")]
         V1 & V2 --> F3["Tính Cosine Similarity"]
         F3 --> F4["Trọng số Kỹ năng"]
     end
 
-    F --> Semantic Matching
-    Semantic Matching --> G["Tính toán độ tương thích"]
+    F --> SemanticMatching
+    SemanticMatching --> G["Tính toán độ tương thích"]
 
     D & E & G --> H["Tổng hợp Điểm số (Overall Score)"]
 
