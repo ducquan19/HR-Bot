@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards, Delete } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -29,6 +29,12 @@ export class InterviewsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Patch(':id/cancel')
+  cancel(@Param('id') id: string) {
+    return this.interviews.updateStatus(id, 'CANCELLED' as any);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post(':id/send-invite')
   sendInvite(@Param('id') id: string) {
     return this.interviews.sendInvite(id);
@@ -42,5 +48,11 @@ export class InterviewsController {
   @Post('public/:token/submit')
   submitPublic(@Param('token') token: string, @Body() dto: SubmitInterviewDto) {
     return this.interviews.submitPublic(token, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.interviews.remove(id);
   }
 }
