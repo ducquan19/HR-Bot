@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '@/constants'
-import type { ApiResponse, CampaignMember, CampaignPositionSummary, Candidate, CandidateFilters, CandidateSearchPayload, PublicApplicationForm, PublicInterviewSession, RecruitmentCampaign, SemanticCandidateResult, User, VirtualInterview } from '@/types'
+import type { ApiResponse, CampaignMember, CampaignPositionSummary, Candidate, CandidateFilters, CandidateSearchPayload, JobPosition, PublicApplicationForm, PublicInterviewSession, RecruitmentCampaign, SemanticCandidateResult, User, VirtualInterview } from '@/types'
 
 function toBackendEnum(value?: string) {
   return value?.toUpperCase()
@@ -19,6 +19,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   const payload = (await response.json().catch(() => ({}))) as ApiResponse<T>
   if (!response.ok || payload.success === false) {
+    if (response.status === 401) {
+      localStorage.removeItem('hrbot_access_token')
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+    }
     const message = Array.isArray((payload as any).message) ? (payload as any).message.join(', ') : (payload as any).message
     throw new Error(message || payload.error || `Request failed with status ${response.status}`)
   }
@@ -77,13 +83,21 @@ export const api = {
       localStorage.removeItem('hrbot_access_token')
       return request('/auth/logout', { method: 'POST' })
     },
+    changePassword(currentPassword: string, newPassword: string) {
+      return request('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      })
+    },
   },
   campaigns: {
+    jobPositions: () => request<JobPosition[]>('/campaigns/job-positions'),
     list: () => request<RecruitmentCampaign[]>('/campaigns'),
     create: (payload: unknown) => request<RecruitmentCampaign>('/campaigns', { method: 'POST', body: JSON.stringify(payload) }),
     update: (id: string, payload: Partial<RecruitmentCampaign>) => {
       const body = {
         title: payload.name,
+        department: payload.department,
         deadline: payload.endDate,
         status: toBackendEnum(payload.status),
       }
@@ -106,6 +120,7 @@ export const api = {
     list: (filters: CandidateFilters = {}) => {
       const params = new URLSearchParams()
       if (filters.search) params.set('search', filters.search)
+      if (filters.campaignId) params.set('campaignId', filters.campaignId)
       if (filters.stage) params.set('stage', filters.stage.toUpperCase())
       if (filters.skills?.[0]) params.set('skill', filters.skills[0])
       if (filters.scoreMin !== undefined) params.set('scoreMin', String(filters.scoreMin))
@@ -130,6 +145,8 @@ export const api = {
     create: (payload: unknown) => request<VirtualInterview>('/interviews', { method: 'POST', body: JSON.stringify(payload) }),
     sendInvite: (id: string) => request(`/interviews/${id}/send-invite`, { method: 'POST' }),
     updateStatus: (id: string, status: string) => request(`/interviews/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: toBackendEnum(status) }) }),
+    cancel: (id: string) => request(`/interviews/${id}/cancel`, { method: 'PATCH' }),
+    remove: (id: string) => request<{ id: string }>(`/interviews/${id}`, { method: 'DELETE' }),
     publicFind: (token: string) => request<PublicInterviewSession>(`/interviews/public/${token}`),
     publicSubmit: (token: string, answers: Array<{ questionId: string; answer: string; duration?: number }>) =>
       request(`/interviews/public/${token}/submit`, { method: 'POST', body: JSON.stringify({ answers }) }),

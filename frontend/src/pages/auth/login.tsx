@@ -1,155 +1,523 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Alert } from '@/components/ui/alert'
 import { useAuthStore } from '@/stores/auth-store'
-import { Mail, Lock, Briefcase } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, Brain, CheckCircle2, Zap, Shield, Clock } from 'lucide-react'
 
-export function LoginPage() {
+// ─── Animated AI CV Widget ────────────────────────────────────────────────────
+function AiCvWidget() {
+  const [progress, setProgress] = useState(0)
+  const [scores, setScores] = useState({ overall: 0, fit: 0, skill: 0, exp: 0, edu: 0 })
+  const [queueVisible, setQueueVisible] = useState(false)
+
+  useEffect(() => {
+    let progressTimer: ReturnType<typeof setTimeout>
+    let scoreTimer: ReturnType<typeof setTimeout>
+    let queueTimer: ReturnType<typeof setTimeout>
+    let restartTimer: ReturnType<typeof setTimeout>
+
+    const startAnimation = () => {
+      setProgress(0)
+      setScores({ overall: 0, fit: 0, skill: 0, exp: 0, edu: 0 })
+      setQueueVisible(false)
+
+      progressTimer = setTimeout(() => {
+        let p = 0
+        const interval = setInterval(() => {
+          p += 1
+          setProgress(p)
+          if (p >= 100) clearInterval(interval)
+        }, 15)
+      }, 300)
+
+      scoreTimer = setTimeout(() => {
+        let tick = 0
+        const interval = setInterval(() => {
+          tick += 1
+          setScores({
+            overall: Math.min(Math.round(tick * 1.48), 74),
+            fit: Math.min(Math.round(tick * 1.48), 74),
+            skill: Math.min(Math.round(tick * 1.76), 88),
+            exp: Math.min(Math.round(tick * 1.8), 90),
+            edu: Math.min(Math.round(tick * 1.4), 70),
+          })
+          if (tick >= 50) clearInterval(interval)
+        }, 25)
+      }, 800)
+
+      queueTimer = setTimeout(() => setQueueVisible(true), 2000)
+
+      restartTimer = setTimeout(startAnimation, 6000)
+    }
+
+    startAnimation()
+
+    return () => {
+      clearTimeout(progressTimer)
+      clearTimeout(scoreTimer)
+      clearTimeout(queueTimer)
+      clearTimeout(restartTimer)
+    }
+  }, [])
+
+  return (
+    <div className="bg-white rounded-2xl shadow-xl shadow-blue-900/5 p-6 w-full max-w-[420px] text-sm border border-gray-100 relative z-10">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-md shadow-blue-200">
+            <Brain className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <p className="font-bold text-gray-900 text-sm">AI Phân tích CV</p>
+            <p className="text-xs text-gray-500 mt-0.5">Senior Backend Engineer · 12 ứng viên</p>
+          </div>
+        </div>
+        <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          Đang xử lý
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div className="mb-6">
+        <div className="flex justify-between text-xs font-semibold text-gray-600 mb-2">
+          <span>Tiến trình phân tích</span>
+          <span className="text-blue-600">{progress}%</span>
+        </div>
+        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-blue-600 rounded-full transition-all duration-75"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Candidate card */}
+      <div className="bg-gray-50/80 rounded-2xl p-4 mb-5 border border-gray-100/50">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-full bg-emerald-500 flex items-center justify-center text-white font-black text-lg flex-shrink-0 shadow-md shadow-emerald-200">
+            TH
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="font-bold text-gray-900 text-base">Trần Thị Hương</p>
+                <p className="text-xs font-medium text-gray-500 mb-2.5">Backend Engineer</p>
+              </div>
+              <div className="text-center bg-white px-3 py-1.5 rounded-xl border border-blue-100 shadow-sm">
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">Điểm tổng</p>
+                <div className="text-xl font-black text-blue-600 leading-none">{scores.overall}<span className="text-xs ml-0.5">%</span></div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3 text-xs text-gray-500 mb-3 font-medium">
+              <span className="flex items-center gap-1">💼 5 năm kinh nghiệm</span>
+              <span className="flex items-center gap-1">🎓 ĐH KHTN TP.HCM</span>
+            </div>
+            
+            <div className="flex flex-wrap gap-1.5">
+              {['Python', 'Django', 'PostgreSQL', 'Docker'].map((s) => (
+                <span key={s} className="px-2 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-md text-[10px] font-bold tracking-wide">{s}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Score breakdown */}
+        <div className="mt-5 space-y-3">
+          {[
+            { label: 'Độ phù hợp', value: scores.fit, color: 'bg-blue-600' },
+            { label: 'Kỹ năng kỹ thuật', value: scores.skill, color: 'bg-emerald-500' },
+            { label: 'Kinh nghiệm', value: scores.exp, color: 'bg-purple-500' },
+            { label: 'Học vấn', value: scores.edu, color: 'bg-orange-500' },
+          ].map((item) => (
+            <div key={item.label} className="flex items-center gap-3">
+              <span className="text-xs font-medium text-gray-600 w-28 flex-shrink-0">{item.label}</span>
+              <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-200 ${item.color}`}
+                  style={{ width: `${item.value}%` }}
+                />
+              </div>
+              <span className="text-xs font-bold text-gray-700 w-8 text-right">{item.value}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-purple-50/50 border border-purple-100 rounded-xl p-3 mb-5">
+        <p className="text-xs text-purple-700 font-medium flex items-center gap-1.5">
+          <span>✨</span> Nhận xét của AI
+        </p>
+        <p className="text-xs text-purple-600/80 mt-1 leading-relaxed">
+          {scores.overall > 20 ? "Kinh nghiệm thực tế tốt. Cần đánh giá thêm về mức độ phù hợp văn hóa công ty." : "Đang tạo nhận xét..."}
+        </p>
+      </div>
+
+      {/* Queue */}
+      <div
+        className={`transition-all duration-500 ${queueVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-gray-500 flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5" /> Hàng đợi phân tích
+          </p>
+          <span className="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">3 CV</span>
+        </div>
+        <div className="flex gap-2">
+          {[
+            { initials: 'PD', name: 'Phạm Thị Dung', role: 'Marketing Mgr', color: 'bg-pink-500' },
+            { initials: 'NB', name: 'Nguyễn Bảo', role: 'Sales Lead', color: 'bg-orange-500' },
+            { initials: 'VT', name: 'Võ Thành', role: 'Data Analyst', color: 'bg-teal-500' },
+          ].map((p) => (
+            <div key={p.initials} className="flex-1 flex flex-col items-center gap-1.5 bg-gray-50 border border-gray-100 rounded-xl py-2 px-1">
+              <div className={`w-7 h-7 rounded-full ${p.color} flex items-center justify-center text-white text-[10px] font-bold shadow-sm`}>
+                {p.initials}
+              </div>
+              <div className="text-center">
+                <p className="text-[10px] text-gray-800 font-bold leading-tight truncate w-[80px]">{p.name}</p>
+                <p className="text-[9px] text-gray-400 mt-0.5 truncate w-[80px]">{p.role}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Login Modal ──────────────────────────────────────────────────────────────
+function LoginModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
   const navigate = useNavigate()
-  const { login, isLoading } = useAuthStore()
+  const { login, register, isLoading } = useAuthStore()
+  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('admin@hrbot.com')
   const [password, setPassword] = useState('password')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+
+  const getPasswordStrength = (pass: string) => {
+    let score = 0
+    if (pass.length >= 8) score += 25
+    if (/[A-Z]/.test(pass)) score += 25
+    if (/[a-z]/.test(pass)) score += 25
+    if (/[0-9!@#$%^&*]/.test(pass)) score += 25
+    return score
+  }
+  const strength = getPasswordStrength(password)
+
+  if (!isOpen) return null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-
     try {
-      await login(email, password)
+      if (mode === 'login') {
+        await login(email, password)
+      } else {
+        if (password !== confirmPassword) {
+          setError('Mật khẩu xác nhận không khớp')
+          return
+        }
+        if (strength < 100) {
+          setError('Mật khẩu chưa đủ mạnh. Yêu cầu ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường và số/ký tự đặc biệt.')
+          return
+        }
+        await register(email, password, name)
+      }
       navigate('/dashboard')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      setError(err instanceof Error ? err.message : 'Có lỗi xảy ra')
+    }
+  }
+
+  const toggleMode = () => {
+    setMode(mode === 'login' ? 'register' : 'login')
+    setError('')
+    if (mode === 'login') {
+      setEmail('')
+      setPassword('')
+      setConfirmPassword('')
+    } else {
+      setEmail('admin@hrbot.com')
+      setPassword('password')
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Header */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-2">
+          ✕
+        </button>
+        
         <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center text-white">
-              <Briefcase className="w-7 h-7" />
-            </div>
-            <h1 className="text-3xl font-bold">HR Bot</h1>
+          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-200">
+            <span className="text-white font-black text-xl">H</span>
           </div>
-          <p className="text-muted-foreground">AI-Powered Recruitment Assistant</p>
+          <h2 className="text-2xl font-black text-gray-900">
+            {mode === 'login' ? 'Chào mừng trở lại!' : 'Tạo tài khoản mới'}
+          </h2>
+          <p className="text-gray-500 text-sm mt-2">
+            {mode === 'login' ? 'Đăng nhập để tiếp tục quản lý tuyển dụng.' : 'Đăng ký tài khoản Recruiter để bắt đầu.'}
+          </p>
         </div>
 
-        {/* Login Card */}
-        <Card>
-          <CardHeader className="space-y-2">
-            <CardTitle className="text-2xl">Welcome Back</CardTitle>
-            <CardDescription>Sign in to your HR Bot account to continue</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {error && (
-              <Alert variant="error" title="Login Error">
-                {error}
-              </Alert>
-            )}
+        {error && (
+          <div className="mb-6 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3 font-medium">
+            <span className="text-red-500">⚠</span> {error}
+          </div>
+        )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Email Input */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Email Address</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
-                    required
-                  />
-                </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {mode === 'register' && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Họ và tên</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-4 h-11 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                  required
+                  placeholder="Nhập họ và tên"
+                />
               </div>
+            </div>
+          )}
 
-              {/* Password Input */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-10 h-10 rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {showPassword ? '🙈' : '👁️'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Demo Credentials Note */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm">
-                <p className="text-blue-800 dark:text-blue-200">
-                  <strong>Demo Credentials:</strong> admin@hrbot.com / password
-                </p>
-              </div>
-
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                className="w-full"
-                isLoading={isLoading}
-                disabled={isLoading}
-              >
-                {isLoading ? 'Signing in...' : 'Sign In'}
-              </Button>
-            </form>
-
-            {/* Divider */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email</label>
             <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
+              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full pl-10 pr-4 h-11 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                required
+                placeholder="Nhập email"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Mật khẩu</label>
+            <div className="relative">
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full pl-10 pr-10 h-11 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                required
+                placeholder="Nhập mật khẩu"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            {mode === 'register' && (
+              <div className="mt-3 space-y-3">
+                {password.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex gap-1.5 h-1.5 w-full">
+                      <div className={`h-full flex-1 rounded-full ${strength >= 25 ? (strength >= 100 ? 'bg-emerald-500' : strength >= 75 ? 'bg-blue-500' : strength >= 50 ? 'bg-yellow-500' : 'bg-red-500') : 'bg-gray-200'}`} />
+                      <div className={`h-full flex-1 rounded-full ${strength >= 50 ? (strength >= 100 ? 'bg-emerald-500' : strength >= 75 ? 'bg-blue-500' : 'bg-yellow-500') : 'bg-gray-200'}`} />
+                      <div className={`h-full flex-1 rounded-full ${strength >= 75 ? (strength >= 100 ? 'bg-emerald-500' : 'bg-blue-500') : 'bg-gray-200'}`} />
+                      <div className={`h-full flex-1 rounded-full ${strength >= 100 ? 'bg-emerald-500' : 'bg-gray-200'}`} />
+                    </div>
+                    <p className="text-[10px] font-medium text-gray-500 text-right">
+                      {strength < 50 ? 'Yếu' : strength < 100 ? 'Trung bình' : 'Mạnh'}
+                    </p>
+                  </div>
+                )}
+                
+                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                  <p className="text-[11px] font-semibold text-gray-600 mb-2.5">Yêu cầu mật khẩu:</p>
+                  <div className="grid grid-cols-2 gap-y-2.5 gap-x-2">
+                    {[
+                      { label: 'Tối thiểu 8 ký tự', met: password.length >= 8 },
+                      { label: 'Có chữ hoa', met: /[A-Z]/.test(password) },
+                      { label: 'Có chữ thường', met: /[a-z]/.test(password) },
+                      { label: 'Số/Ký tự đặc biệt', met: /[0-9!@#$%^&*]/.test(password) },
+                    ].map((c) => (
+                      <div key={c.label} className={`flex items-center gap-1.5 text-[10px] transition-colors ${c.met ? 'text-emerald-600 font-bold' : 'text-gray-500 font-medium'}`}>
+                        <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border transition-colors ${c.met ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300 bg-white'}`}>
+                          {c.met && <svg className="w-2 h-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                        </div>
+                        {c.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-card text-muted-foreground">Or continue with</span>
+            )}
+          </div>
+
+          {mode === 'register' && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Xác nhận mật khẩu</label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full pl-10 pr-10 h-11 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                  required
+                  placeholder="Nhập lại mật khẩu"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
+          )}
 
-            {/* Google Sign In */}
-            <Button variant="outline" className="w-full" onClick={() => setError('Google sign-in is not configured yet.')}>
-              <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-              </svg>
-              Sign in with Google
-            </Button>
-
-            {/* Footer */}
-            <div className="text-center text-sm text-muted-foreground">
-              <p>
-                Don't have an account?{' '}
-                <a href="mailto:admin@hrbot.com" className="text-primary hover:underline font-medium">
-                  Contact your administrator
-                </a>
-              </p>
+          {mode === 'login' && (
+            <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-3 text-xs text-blue-700 flex items-center gap-2 font-medium mt-6">
+              <CheckCircle2 className="w-4 h-4 text-blue-500 flex-shrink-0" />
+              <span>Demo: admin@hrbot.com / password</span>
             </div>
-          </CardContent>
-        </Card>
+          )}
 
-        {/* Footer Info */}
-        <div className="mt-8 text-center text-xs text-muted-foreground">
-          <p>© 2024 HR Bot. All rights reserved.</p>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-lg shadow-blue-200 mt-4"
+          >
+            {isLoading ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : mode === 'login' ? 'Đăng nhập' : 'Đăng ký'}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center text-sm text-gray-500 font-medium">
+          {mode === 'login' ? 'Chưa có tài khoản?' : 'Đã có tài khoản?'}
+          <button type="button" onClick={toggleMode} className="ml-1 text-blue-600 font-bold hover:underline">
+            {mode === 'login' ? 'Đăng ký ngay' : 'Đăng nhập'}
+          </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── Landing Page ─────────────────────────────────────────────────────────────
+export function LoginPage() {
+  const [showLoginModal, setShowLoginModal] = useState(false)
+
+  return (
+    <div className="min-h-screen bg-white font-sans overflow-hidden">
+      {/* Navbar */}
+      <nav className="flex items-center justify-between py-5 px-6 md:px-10 max-w-7xl mx-auto relative z-20">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded bg-blue-600 flex items-center justify-center text-white font-black text-sm">
+            H
+          </div>
+          <span className="text-xl font-black text-gray-900 tracking-tight">
+            HR <span className="text-blue-600">Bot</span>
+          </span>
+        </div>
+        
+
+
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowLoginModal(true)} 
+            className="text-sm font-semibold text-gray-700 hover:text-gray-900 px-5 py-2 border border-gray-200 hover:bg-gray-50 rounded-xl transition-colors hidden sm:block"
+          >
+            Đăng nhập
+          </button>
+          <button 
+            onClick={() => setShowLoginModal(true)}
+            className="text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-xl shadow-md shadow-blue-200 transition-all"
+          >
+            Dùng thử miễn phí
+          </button>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <main className="max-w-7xl mx-auto px-6 md:px-10 pt-6 md:pt-8 pb-24 grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-8 items-center relative z-10">
+        
+        {/* Left side */}
+        <div className="max-w-xl">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-blue-600 text-xs font-bold tracking-wide mb-6">
+            ✨ AI hỗ trợ tuyển dụng thông minh
+          </div>
+          
+          <h1 className="text-5xl lg:text-[64px] font-black text-gray-900 leading-[1.1] mb-6 tracking-tight">
+            Tuyển <span className="text-blue-600">đúng người</span><br />
+            hiệu quả <span className="text-red-500">vượt trội</span>
+          </h1>
+          
+          <p className="text-gray-500 text-lg leading-relaxed mb-8 font-medium">
+            HR Bot là nền tảng ứng dụng trí tuệ nhân tạo giúp doanh nghiệp tự động hóa quy trình tuyển dụng, tìm kiếm và đánh giá ứng viên nhanh chóng, chính xác.
+          </p>
+          
+          <div className="flex flex-wrap items-center gap-4 mb-16">
+            <button 
+              onClick={() => setShowLoginModal(true)}
+              className="px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center gap-2"
+            >
+              Dùng thử miễn phí →
+            </button>
+
+          </div>
+
+          {/* Feature cards row */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm shadow-gray-100/50 flex flex-col gap-3 group hover:border-green-200 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
+                <Shield className="w-5 h-5 text-green-600" />
+              </div>
+              <h3 className="font-bold text-gray-900 text-[13px] whitespace-nowrap">Đảm bảo chất lượng</h3>
+              <p className="text-[11px] text-gray-500 leading-relaxed">AI kiểm tra và đánh giá ứng viên một cách khách quan và chính xác.</p>
+              <div className="w-8 h-1 bg-green-500 rounded-full mt-auto opacity-50 group-hover:opacity-100 transition-opacity"></div>
+            </div>
+            
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm shadow-gray-100/50 flex flex-col gap-3 group hover:border-blue-200 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                <Zap className="w-5 h-5 text-blue-600" />
+              </div>
+              <h3 className="font-bold text-gray-900 text-[13px] whitespace-nowrap">Độ chính xác cao</h3>
+              <p className="text-[11px] text-gray-500 leading-relaxed">Thuật toán AI tiên tiến giúp lọc và xếp hạng ứng viên phù hợp nhất.</p>
+              <div className="w-8 h-1 bg-blue-500 rounded-full mt-auto opacity-50 group-hover:opacity-100 transition-opacity"></div>
+            </div>
+            
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm shadow-gray-100/50 flex flex-col gap-3 group hover:border-orange-200 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-orange-500" />
+              </div>
+              <h3 className="font-bold text-gray-900 text-[13px] whitespace-nowrap">Tiết kiệm thời gian</h3>
+              <p className="text-[11px] text-gray-500 leading-relaxed">Tự động hóa quy trình tuyển dụng, giảm thiểu thời gian và chi phí.</p>
+              <div className="w-8 h-1 bg-orange-500 rounded-full mt-auto opacity-50 group-hover:opacity-100 transition-opacity"></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right side - AI Widget */}
+        <div className="relative flex justify-center items-center lg:justify-end">
+          <div className="absolute inset-0 bg-blue-50/50 rounded-full blur-[100px] -z-10 w-[120%] h-[120%] -translate-x-[10%] -translate-y-[10%]"></div>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[80%] bg-indigo-50/50 rounded-full blur-[80px] -z-10"></div>
+          
+          <AiCvWidget />
+        </div>
+      </main>
+
+      <LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
     </div>
   )
 }
