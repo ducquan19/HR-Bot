@@ -23,6 +23,28 @@ export class CampaignsService {
     return campaigns.map((c) => this.toFrontendCampaign(c, user));
   }
 
+  async findAllJobPositions() {
+    const positions = await this.prisma.jobPosition.findMany({
+      include: {
+        jobDescription: true,
+        positionSkills: { include: { skill: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return positions.map(p => ({
+      id: p.id,
+      title: p.title,
+      department: p.department,
+      seniority: p.seniority,
+      employmentType: p.employmentType,
+      overview: p.jobDescription?.overview,
+      responsibilities: p.jobDescription?.responsibilities,
+      requirements: p.jobDescription?.requirements,
+      benefits: p.jobDescription?.benefits,
+      skills: p.positionSkills.map(ps => ps.skill.name),
+    }));
+  }
+
   async findOne(user: CampaignUser, id: string) {
     const campaign = await this.prisma.recruitmentCampaign.findUnique({
       where: { id },
@@ -366,43 +388,50 @@ export class CampaignsService {
   }
 
   private validateCreatePosition(position: CreateCampaignPositionDto, index: number) {
+    if (position.positionId) return;
     if (!position.title?.trim()) throw new BadRequestException(`Position ${index} title is required`);
     if (!position.jd) throw new BadRequestException(`Position ${index} job description is required`);
   }
 
   private async createCampaignPosition(tx: any, campaignId: string, userId: string, positionDto: CreateCampaignPositionDto, fallbackDepartment?: string) {
-    const position = await tx.jobPosition.create({
-      data: {
-        title: positionDto.title,
-        department: positionDto.department ?? fallbackDepartment,
-        seniority: positionDto.seniority,
-        employmentType: positionDto.employmentType ?? 'FULL_TIME',
-        createdById: userId,
-        jobDescription: { create: positionDto.jd },
-      },
-    });
-
-    for (const s of positionDto.skills ?? []) {
-      const skill = await tx.skill.upsert({
-        where: { name: s.name },
-        create: { name: s.name, category: s.category },
-        update: { category: s.category },
-      });
-      await tx.positionSkill.create({
+    let positionId = positionDto.positionId;
+    if (!positionId) {
+      const position = await tx.jobPosition.create({
         data: {
-          positionId: position.id,
-          skillId: skill.id,
-          requiredLevel: SkillLevel.INTERMEDIATE,
-          weight: s.weight ?? 1,
-          isRequired: s.isRequired ?? true,
+          title: positionDto.title,
+          department: positionDto.department ?? fallbackDepartment,
+          seniority: positionDto.seniority,
+          employmentType: positionDto.employmentType ?? 'FULL_TIME',
+          createdById: userId,
+          jobDescription: { create: positionDto.jd },
         },
       });
+      positionId = position.id;
+
+      for (const s of positionDto.skills ?? []) {
+        const skill = await tx.skill.upsert({
+          where: { name: s.name },
+          create: { name: s.name, category: s.category },
+          update: { category: s.category },
+        });
+        await tx.positionSkill.create({
+          data: {
+            positionId: position.id,
+            skillId: skill.id,
+            requiredLevel: SkillLevel.INTERMEDIATE,
+            weight: s.weight ?? 1,
+            isRequired: s.isRequired ?? true,
+          },
+        });
+      }
+    } else {
+      await tx.jobPosition.findUniqueOrThrow({ where: { id: positionId } });
     }
 
     return tx.campaignPosition.create({
       data: {
         campaignId,
-        positionId: position.id,
+        positionId,
         vacancies: positionDto.vacancies ?? 1,
       },
     });

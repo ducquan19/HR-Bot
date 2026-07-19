@@ -40,6 +40,10 @@ export class PositionSkillDto {
 }
 
 export class CreateCampaignPositionDto {
+  @IsOptional()
+  @IsString()
+  positionId?: string;
+
   @IsString()
   @IsNotEmpty()
   title!: string;
