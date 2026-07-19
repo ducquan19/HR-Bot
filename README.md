@@ -54,6 +54,114 @@ Dự án sử dụng kiến trúc Microservices kết hợp với các công ngh
 
 ---
 
+## 🧠 Kiến Trúc Hệ Thống & Luồng AI (Architecture & AI Workflows)
+
+### 1. Sơ Đồ Kiến Trúc Tổng Thể (System Architecture)
+Kiến trúc Microservices của HR Bot được chia thành các luồng xử lý độc lập để đảm bảo hiệu năng và khả năng mở rộng:
+
+```mermaid
+graph TD
+    subgraph Frontend [Client Side]
+        UI[React/Vite Web App]
+        LKClient[LiveKit WebRTC Client]
+    end
+
+    subgraph Backend [Core API - NestJS]
+        API[REST API Controllers]
+        Auth[Auth & JWT]
+        Prisma[Prisma ORM]
+        Queue[BullMQ Producer]
+    end
+
+    subgraph Infrastructure [Data & Storage]
+        PG[(PostgreSQL + pgvector)]
+        Redis[(Redis Cache & Queue)]
+        MinIO[(MinIO / S3 Storage)]
+    end
+
+    subgraph AIServices [AI & Media Server]
+        FastAPI[Python Worker / FastAPI]
+        LKServer[LiveKit Server]
+        Agent[Voice AI Agent]
+    end
+
+    subgraph External [External Services]
+        LLM[Google Gemini / OpenAI]
+        SMTP[Mail Server]
+    end
+
+    UI <-->|HTTP/REST| API
+    UI <-->|WebRTC/WSS| LKServer
+    API -->|Read/Write| Prisma
+    Prisma <--> PG
+    API -->|Publish Jobs| Redis
+    API -->|Save CV| MinIO
+    
+    Redis <-->|Consume Jobs| FastAPI
+    FastAPI <-->|Fetch CV| MinIO
+    FastAPI <-->|Query Vectors| PG
+    FastAPI <-->|API Calls| LLM
+    
+    LKServer <-->|Audio Stream| Agent
+    Agent <-->|Prompt/Response| LLM
+    API -->|Send Emails| SMTP
+```
+
+### 2. Luồng Hoạt Động Của AI Voice Agent (Voice Interview Flow)
+Trong quá trình phỏng vấn ảo, AI Agent hoạt động theo cơ chế luân phiên (turn-taking) theo thời gian thực:
+
+```mermaid
+sequenceDiagram
+    participant User as Ứng Viên (Mic/Loa)
+    participant LK as LiveKit Server
+    participant STT as Speech-to-Text
+    participant LLM as Trí Tuệ Nhân Tạo
+    participant TTS as Text-to-Speech
+
+    User->>LK: Nói (Audio Stream)
+    LK->>STT: Chuyển tiếp Audio
+    STT-->>LLM: Văn bản (Transcript)
+    
+    Note over LLM: Tổng hợp ngữ cảnh:<br/>1. Lịch sử chat<br/>2. CV ứng viên<br/>3. Mô tả công việc (JD)
+    
+    LLM-->>TTS: Phản hồi dạng Text (Streaming)
+    TTS-->>LK: Tổng hợp Giọng nói (Audio Stream)
+    LK->>User: Phát âm thanh (Loa)
+```
+
+### 3. Thuật Toán Chấm Điểm & Đánh Giá (Scoring Logic)
+Quy trình AI đánh giá và tính điểm CV của ứng viên so với Mô tả công việc (JD):
+
+```mermaid
+flowchart TD
+    A[Upload CV PDF] --> B(Trích xuất bằng LLM)
+    B --> C{Dữ liệu ứng viên JSON}
+    
+    C -->|Kinh nghiệm| D[Tính điểm Kinh nghiệm (Years)]
+    C -->|Học vấn| E[Tính điểm Học vấn (Degree/GPA)]
+    C -->|Kỹ năng| F[So khớp Kỹ năng (Semantic Matching)]
+    
+    subgraph Semantic Matching [Xử lý Vector]
+        F1[Kỹ năng Ứng viên] -->|Embedding| V1[(Vector 1)]
+        F2[Kỹ năng Yêu cầu từ JD] -->|Embedding| V2[(Vector 2)]
+        V1 & V2 --> F3[Tính Cosine Similarity]
+        F3 --> F4[Trọng số Kỹ năng]
+    end
+    
+    F --> Semantic Matching
+    Semantic Matching --> G
+    
+    D & E & G --> H[Tổng hợp Điểm số (Overall Score)]
+    
+    H --> I{Phân loại}
+    I -->|> 85%| J[Strong Recommend]
+    I -->|70% - 85%| K[Recommend]
+    I -->|50% - 70%| L[Consider]
+    I -->|< 50%| M[Reject]
+```
+
+---
+
 ## 📂 Cấu Trúc Thư Mục (Project Structure)
 
 ```text
