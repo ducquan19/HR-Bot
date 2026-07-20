@@ -190,8 +190,8 @@ export function InterviewsPage() {
     <div className="p-8 max-w-[1400px] mx-auto space-y-8">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight mb-2">Phỏng vấn ảo</h1>
-          <p className="text-gray-500 text-sm">Quản lý các phòng phỏng vấn trực tuyến tích hợp AI & WebRTC.</p>
+          <h1 className="text-3xl font-black text-gray-900 dark:text-white tracking-tight mb-2">Phỏng vấn ảo</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Quản lý các phòng phỏng vấn trực tuyến tích hợp AI & WebRTC.</p>
         </div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto">
           <SearchableSelect
@@ -218,31 +218,24 @@ export function InterviewsPage() {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm font-medium">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 px-4 py-3 rounded-xl text-sm font-medium">
           {error}
         </div>
       )}
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      {/* Stats Row — compact pills */}
+      <div className="flex flex-wrap gap-3">
         {[
-          { title: 'Sắp tới', value: scheduledInterviews.length, icon: Clock, color: 'from-orange-400 to-amber-500', bgColor: 'bg-orange-50', iconColor: 'text-orange-600' },
-          { title: 'Đã hoàn thành', value: completedInterviews.length, icon: CheckCircle2, color: 'from-green-500 to-emerald-500', bgColor: 'bg-green-50', iconColor: 'text-green-600' },
-          { title: 'Tổng cộng', value: interviews.length, icon: Video, color: 'from-blue-500 to-indigo-500', bgColor: 'bg-blue-50', iconColor: 'text-blue-600' },
+          { title: 'Sắp tới', value: scheduledInterviews.length, icon: Clock, bgColor: 'bg-orange-50 dark:bg-orange-900/20', borderColor: 'border-orange-100 dark:border-orange-800/40', iconColor: 'text-orange-500 dark:text-orange-400', valueColor: 'text-orange-600 dark:text-orange-300' },
+          { title: 'Đã hoàn thành', value: completedInterviews.length, icon: CheckCircle2, bgColor: 'bg-emerald-50 dark:bg-emerald-900/20', borderColor: 'border-emerald-100 dark:border-emerald-800/40', iconColor: 'text-emerald-500 dark:text-emerald-400', valueColor: 'text-emerald-600 dark:text-emerald-300' },
+          { title: 'Tổng cộng', value: interviews.length, icon: Video, bgColor: 'bg-blue-50 dark:bg-blue-900/20', borderColor: 'border-blue-100 dark:border-blue-800/40', iconColor: 'text-blue-500 dark:text-blue-400', valueColor: 'text-blue-600 dark:text-blue-300' },
         ].map((stat, idx) => {
           const Icon = stat.icon
           return (
-            <div key={idx} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm relative overflow-hidden group">
-              <div className="flex justify-between items-start mb-4">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${stat.bgColor} group-hover:scale-110 transition-transform`}>
-                  <Icon className={`w-6 h-6 ${stat.iconColor}`} />
-                </div>
-              </div>
-              <div>
-                <div className="text-3xl font-black text-gray-900 mb-1">{stat.value}</div>
-                <div className="text-sm font-medium text-gray-500">{stat.title}</div>
-              </div>
-              <div className={`absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-gradient-to-br ${stat.color} opacity-[0.08] group-hover:opacity-[0.15] transition-opacity blur-2xl`}></div>
+            <div key={idx} className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border ${stat.bgColor} ${stat.borderColor} transition-all hover:shadow-sm`}>
+              <Icon className={`w-4 h-4 flex-shrink-0 ${stat.iconColor}`} />
+              <span className={`text-xl font-black leading-none ${stat.valueColor}`}>{stat.value}</span>
+              <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{stat.title}</span>
             </div>
           )
         })}
@@ -278,7 +271,7 @@ export function InterviewsPage() {
 
       <div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
-          <h2 className="text-xl font-bold text-gray-900 whitespace-nowrap">Danh sách phỏng vấn sắp tới</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">Danh sách phỏng vấn sắp tới</h2>
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto justify-end">
             {scheduledInterviews.length > 0 && (
@@ -296,9 +289,9 @@ export function InterviewsPage() {
         </div>
 
         {isLoading && interviews.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">Đang tải...</div>
+          <div className="glass-panel rounded-2xl border-gray-100 dark:border-gray-800 p-12 text-center text-gray-400">Đang tải...</div>
         ) : scheduledInterviews.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center flex flex-col items-center">
+          <div className="glass-panel rounded-2xl border-gray-100 dark:border-gray-800 p-12 text-center flex flex-col items-center">
             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
               <AlertCircle className="w-8 h-8 text-gray-300" />
             </div>
@@ -311,8 +304,8 @@ export function InterviewsPage() {
               return (
                 <div
                   key={interview.id}
-                  className={`bg-white rounded-2xl border-2 transition-all p-5 relative overflow-hidden group cursor-pointer ${
-                    isSelected ? 'border-blue-500 shadow-md shadow-blue-100' : 'border-gray-100 hover:border-gray-200'
+                  className={`glass-panel rounded-2xl border-2 transition-all p-5 relative overflow-hidden group cursor-pointer ${
+                    isSelected ? 'border-blue-500 shadow-md shadow-blue-100' : 'border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700'
                   }`}
                   onClick={() => toggleInterviewSelect(interview.id)}
                 >
@@ -325,7 +318,7 @@ export function InterviewsPage() {
                       {getCandidateName(interview).charAt(0)}
                     </div>
                     <div className="min-w-0">
-                      <p className="font-bold text-gray-900 truncate" title={getCandidateName(interview)}>{getCandidateName(interview)}</p>
+                      <p className="font-bold text-gray-900 dark:text-white truncate" title={getCandidateName(interview)}>{getCandidateName(interview)}</p>
                       <p className="text-xs text-gray-500 truncate mb-1">{getCandidateEmail(interview)}</p>
                       {interview.campaignId && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
@@ -348,7 +341,7 @@ export function InterviewsPage() {
                   </div>
 
                   <div className="flex flex-col gap-2 pt-4 border-t border-gray-100" onClick={e => e.stopPropagation()}>
-                    <a href={interview.interviewLink} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 w-full py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 text-sm font-semibold rounded-xl transition-colors border border-gray-200">
+                    <a href={interview.interviewLink} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 w-full py-2 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-semibold rounded-xl transition-colors border border-gray-200 dark:border-gray-700">
                       <Video className="w-4 h-4 text-blue-600" />
                       Vào phòng phỏng vấn
                     </a>
@@ -397,13 +390,13 @@ export function InterviewsPage() {
 
       {completedInterviews.length > 0 && (
         <div>
-          <h2 className="text-xl font-bold text-gray-900 mb-6">Đã hoàn thành</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">Đã hoàn thành</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {completedInterviews.map((interview) => (
-              <div key={interview.id} className="bg-gray-50 rounded-xl border border-gray-200 p-4 opacity-75">
+              <div key={interview.id} className="bg-gray-50 dark:bg-slate-900/40 rounded-xl border border-gray-200 dark:border-gray-800 p-4 opacity-75">
                 <div className="flex items-center gap-3 mb-2">
                   <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  <p className="font-semibold text-gray-900 truncate">{getCandidateName(interview)}</p>
+                  <p className="font-semibold text-gray-900 dark:text-white truncate">{getCandidateName(interview)}</p>
                 </div>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs text-gray-500">{formatDateTime(interview.scheduledAt)}</p>
@@ -446,7 +439,7 @@ export function InterviewsPage() {
               <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
                 <BrainCircuit className="w-8 h-8 text-blue-600 animate-pulse" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Đang thiết lập phòng phỏng vấn...</h3>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Đang thiết lập phòng phỏng vấn...</h3>
               <p className="text-sm text-gray-500 mb-6">AI đang phân tích CV để sinh ra các câu hỏi chuyên sâu phù hợp với từng ứng viên.</p>
 
               <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">

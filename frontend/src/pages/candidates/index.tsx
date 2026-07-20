@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
@@ -11,7 +11,74 @@ import { CANDIDATE_STAGES, CANDIDATE_STAGE_COLORS, COMMON_SKILLS } from '@/const
 import { api } from '@/lib/api'
 import { formatDate, formatExperienceDuration, getInitials } from '@/lib/utils'
 import { Check, ChevronDown, Download, Search, Upload, Eye, Mail, Trash2 } from 'lucide-react'
+import { RadarChart } from '@/components/ui/radar-chart'
 import type { Candidate, CandidateSearchMode, SemanticCandidateResult } from '@/types'
+
+const CustomFilterDropdown = ({ 
+  value, 
+  onChange, 
+  options, 
+  placeholder,
+  className 
+}: { 
+  value: string; 
+  onChange: (val: string) => void; 
+  options: { label: string; value: string }[]; 
+  placeholder: string;
+  className?: string;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedOption = options.find(o => o.value === value);
+
+  return (
+    <div className={`relative ${className}`} ref={ref}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center justify-between w-full h-10 px-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-slate-900/60 hover:bg-gray-50 dark:hover:bg-slate-800 text-sm font-medium text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400/50 transition-all shadow-sm"
+      >
+        <span className="truncate pr-2">{selectedOption ? selectedOption.label : placeholder}</span>
+        <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      
+      {isOpen && (
+        <div className="absolute z-50 mt-2 w-full max-h-60 overflow-y-auto rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-slate-800 shadow-xl py-1.5 animate-in fade-in zoom-in-95 origin-top">
+          <button
+            type="button"
+            className={`w-full text-left px-4 py-2 text-sm transition-colors hover:bg-gray-50 dark:hover:bg-slate-700 ${!value ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium' : 'text-gray-700 dark:text-gray-300'}`}
+
+            onClick={() => { onChange(''); setIsOpen(false); }}
+          >
+            {placeholder}
+          </button>
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              className={`w-full text-left px-4 py-2 text-sm transition-colors hover:bg-gray-50 dark:hover:bg-slate-700 ${value === opt.value ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium' : 'text-gray-700 dark:text-gray-300'}`}
+              onClick={() => { onChange(opt.value); setIsOpen(false); }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 export function CandidatesPage() {
   const {
@@ -52,14 +119,17 @@ export function CandidatesPage() {
   const [isCvDownloading, setIsCvDownloading] = useState(false)
   const [stageMoveId, setStageMoveId] = useState<string | null>(null)
   const stageMoveRef = useRef<HTMLDivElement>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState('')
+  const [detailError, setDetailError] = useState('')
   const [uploadForm, setUploadForm] = useState({
     campaignId: '',
     file: null as File | null,
   })
+  const [sortBy, setSortBy] = useState<'score_desc' | 'score_asc' | 'name_asc' | 'date_desc'>('score_desc')
 
   useEffect(() => {
     loadCandidates().catch((err) => setError(err instanceof Error ? err.message : 'Could not load candidates'))
@@ -91,7 +161,18 @@ export function CandidatesPage() {
     return () => document.removeEventListener('mousedown', handlePointerDown)
   }, [])
 
-  const displayedCandidates = searchResults ?? candidates
+  const rawCandidates = searchResults ?? candidates
+  const displayedCandidates = useMemo(() => {
+    // In semantic mode with results, preserve AI ranking order
+    if (searchMode === 'semantic' && searchResults) return rawCandidates
+    return [...rawCandidates].sort((a, b) => {
+      if (sortBy === 'score_desc') return (b.score ?? -1) - (a.score ?? -1)
+      if (sortBy === 'score_asc') return (a.score ?? -1) - (b.score ?? -1)
+      if (sortBy === 'name_asc') return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+      // date_desc: newest first (default from API)
+      return 0
+    })
+  }, [rawCandidates, sortBy, searchMode, searchResults])
   const uploadableCampaigns = campaigns.filter((campaign) => campaign.status === 'active')
 
   const semanticById = useMemo(() => {
@@ -153,8 +234,17 @@ export function CandidatesPage() {
     return trimmed ? Number(trimmed) : undefined
   }
 
-  const handleCriteriaSearch = async (formOverride?: typeof criteriaForm) => {
+  const handleCriteriaSearch = useCallback(async (formOverride?: typeof criteriaForm) => {
     const form = formOverride || criteriaForm
+    // If all fields are empty, reset to show full candidate list
+    const isEmpty = !form.name.trim() && !form.education.trim() && !form.skills.length &&
+      !form.stage && !form.experienceMin && !form.experienceMax &&
+      !form.scoreMin && !form.scoreMax && !form.campaignId
+    if (isEmpty) {
+      setSearchResults(null)
+      setError('')
+      return
+    }
     setIsSearching(true)
     try {
       const results = await api.candidates.search({
@@ -182,7 +272,15 @@ export function CandidatesPage() {
     } finally {
       setIsSearching(false)
     }
-  }
+  }, [criteriaForm])
+
+  // Debounced realtime search triggered by name field changes
+  const triggerDebouncedSearch = useCallback((newForm: typeof criteriaForm) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      handleCriteriaSearch(newForm)
+    }, 400)
+  }, [handleCriteriaSearch])
 
   const handleSemanticSearch = async (formOverride?: typeof criteriaForm) => {
     const form = formOverride || criteriaForm
@@ -236,6 +334,7 @@ export function CandidatesPage() {
   const openCandidateDetail = async (candidateId: string) => {
     setSelectedCandidate(candidateId)
     setDetailCandidate(null)
+    setDetailError('')
     setShowDetailModal(true)
     setIsDetailLoading(true)
     try {
@@ -243,7 +342,9 @@ export function CandidatesPage() {
       setDetailCandidate(candidate)
       setError('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load candidate details')
+      const msg = err instanceof Error ? err.message : 'Could not load candidate details'
+      setDetailError(msg)
+      setError(msg)
     } finally {
       setIsDetailLoading(false)
     }
@@ -390,8 +491,8 @@ export function CandidatesPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-black text-gray-900 mb-1">Ứng viên</h1>
-          <p className="text-gray-500 text-sm">Xem và quản lý hồ sơ ứng viên của bạn</p>
+          <h1 className="text-3xl font-black text-gray-900 dark:text-white mb-1">Ứng viên</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Xem và quản lý hồ sơ ứng viên của bạn</p>
         </div>
         {(isAdmin || campaigns.some(c => c.memberRole === 'owner' || c.memberRole === 'editor')) && (
           <button
@@ -415,10 +516,10 @@ export function CandidatesPage() {
       )}
 
       {/* ── Filter Panel ── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-6">
+      <div className="bg-white/80 dark:bg-slate-900/80 rounded-2xl border-gray-100 dark:border-gray-800 border shadow-sm mb-6 overflow-visible relative z-30">
         {/* Mode Switcher */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100">
-          <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
             {([
               { id: 'criteria', label: '🔍 Tìm theo tiêu chí' },
               { id: 'semantic', label: '✨ Tìm thông minh' },
@@ -429,8 +530,8 @@ export function CandidatesPage() {
                 onClick={() => setSearchMode(mode.id as CandidateSearchMode)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   searchMode === mode.id
-                    ? 'bg-white text-blue-700 shadow-sm font-semibold'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-400 shadow-sm font-semibold'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                 }`}
               >
                 {mode.label}
@@ -461,20 +562,24 @@ export function CandidatesPage() {
         </div>
 
         {searchMode === 'criteria' ? (
-          <div className="p-5">
-            <div className="flex flex-col md:flex-row gap-3">
+          <div className="p-5 overflow-visible">
+            <div className="flex flex-col md:flex-row gap-3 overflow-visible">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
-                  className="w-full pl-9 pr-3 h-10 rounded-xl border border-gray-200 bg-gray-50 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all"
+                  className="w-full pl-9 pr-3 h-10 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-slate-900/60 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white dark:focus:bg-slate-900 transition-all"
                   placeholder="Tên hoặc Email ứng viên"
                   value={criteriaForm.name}
-                  onChange={(event) => setCriteriaForm({ ...criteriaForm, name: event.target.value })}
+                  onChange={(event) => {
+                    const newForm = { ...criteriaForm, name: event.target.value }
+                    setCriteriaForm(newForm)
+                    triggerDebouncedSearch(newForm)
+                  }}
                   onKeyDown={(event) => { if (event.key === 'Enter') handleCriteriaSearch() }}
                 />
               </div>
               <input
-                className="w-full flex-1 px-3 h-10 rounded-xl border border-gray-200 bg-gray-50 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all"
+                className="w-full flex-1 px-3 h-10 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-slate-900/60 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white dark:focus:bg-slate-900 transition-all"
                 placeholder="Trình độ học vấn"
                 value={criteriaForm.education}
                 onChange={(event) => setCriteriaForm({ ...criteriaForm, education: event.target.value })}
@@ -484,9 +589,9 @@ export function CandidatesPage() {
                 <button
                   type="button"
                   onClick={() => setIsSkillDropdownOpen((open) => !open)}
-                  className="flex h-10 w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
+                  className="flex h-10 w-full items-center justify-between rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-slate-900/60 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
                 >
-                  <span className={criteriaForm.skills.length ? 'text-gray-800' : 'text-gray-400'}>
+                  <span className={criteriaForm.skills.length ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400'}>
                     {criteriaForm.skills.length ? `${criteriaForm.skills.length} skill${criteriaForm.skills.length > 1 ? 's' : ''} chọn` : 'Chọn kỹ năng'}
                   </span>
                   <div className="flex items-center gap-1">
@@ -506,8 +611,8 @@ export function CandidatesPage() {
                   </div>
                 </button>
                 {isSkillDropdownOpen && (
-                  <div className="absolute z-20 mt-1.5 max-h-60 w-full overflow-hidden flex flex-col rounded-xl border border-gray-100 bg-white shadow-xl">
-                    <div className="flex items-center border-b border-gray-100 px-3 bg-gray-50/50">
+                  <div className="absolute z-50 mt-1.5 max-h-60 w-full overflow-hidden flex flex-col rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-slate-800 shadow-xl">
+                    <div className="flex items-center border-b border-gray-100 dark:border-gray-700 px-3 bg-gray-50/50 dark:bg-slate-900/50">
                       <Search className="mr-2 h-4 w-4 shrink-0 text-gray-400" />
                       <input
                         className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-gray-400"
@@ -534,7 +639,7 @@ export function CandidatesPage() {
                                 setCriteriaForm({ ...criteriaForm, skills })
                               }}
                               className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
-                                isSelected ? 'bg-blue-50 text-blue-700 font-medium' : 'hover:bg-gray-50 text-gray-700'
+                                isSelected ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium' : 'hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300'
                               }`}
                             >
                               <span>{skill}</span>
@@ -552,7 +657,7 @@ export function CandidatesPage() {
                 <button
                   type="button"
                   onClick={handleClearFilters}
-                  className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 rounded-xl hover:bg-gray-100 transition-all"
+                  className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
                 >
                   Xóa bộ lọc
                 </button>
@@ -578,7 +683,7 @@ export function CandidatesPage() {
                   value={semanticQuery}
                   onChange={(event) => setSemanticQuery(event.target.value)}
                   onKeyDown={(event) => { if (event.key === 'Enter') handleSemanticSearch() }}
-                  className="w-full pl-10 pr-4 h-11 rounded-xl border border-gray-200 bg-gray-50 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all"
+                  className="w-full pl-10 pr-4 h-11 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-slate-900/60 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white dark:focus:bg-slate-900 transition-all"
                 />
               </div>
               <button
@@ -606,52 +711,64 @@ export function CandidatesPage() {
 
       </div>
 
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
         <p className="text-sm text-gray-500">
           {searchResults
             ? `Hiển thị ${displayedCandidates.length} kết quả ${searchMode === 'semantic' ? '· Sắp xếp theo mức độ phù hợp AI' : ''}`
             : `${displayedCandidates.length} ứng viên`}
         </p>
 
-        <div className="flex items-center gap-2">
-          <select
-            className="w-[180px] px-3 h-9 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Sort control */}
+          {!(searchMode === 'semantic' && searchResults) && (
+            <CustomFilterDropdown
+              className="w-[200px]"
+              value={sortBy}
+              onChange={(val) => setSortBy(val as typeof sortBy)}
+              placeholder="Sắp xếp"
+              options={[
+                { value: 'score_desc', label: '⬇ Điểm cao nhất' },
+                { value: 'score_asc',  label: '⬆ Điểm thấp nhất' },
+                { value: 'name_asc',   label: '🔤 Tên A→Z' },
+                { value: 'date_desc',  label: '🕐 Mới nhất' },
+              ]}
+            />
+          )}
+          <CustomFilterDropdown
+            className="w-[180px]"
             value={criteriaForm.stage}
-            onChange={(event) => handleGlobalFilterChange('stage', event.target.value)}
-          >
-            <option value="">Tất cả giai đoạn</option>
-            {Object.entries(CANDIDATE_STAGES).map(([key, value]) => (
-              <option key={key} value={key}>{value}</option>
-            ))}
-          </select>
-          <select
-            className="w-[200px] px-3 h-9 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
+            onChange={(val) => handleGlobalFilterChange('stage', val)}
+            placeholder="Tất cả giai đoạn"
+            options={Object.entries(CANDIDATE_STAGES).map(([value, label]) => ({ value, label }))}
+          />
+          <CustomFilterDropdown
+            className="w-[200px]"
             value={criteriaForm.campaignId}
-            onChange={(event) => handleGlobalFilterChange('campaignId', event.target.value)}
-          >
-            <option value="">Tất cả chiến dịch</option>
-            {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+            onChange={(val) => handleGlobalFilterChange('campaignId', val)}
+            placeholder="Tất cả chiến dịch"
+            options={campaigns.map((c) => ({ value: c.id, label: c.name }))}
+          />
         </div>
       </div>
 
       <div className="space-y-2">
         {isLoading && !searchResults ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+          <div className="glass-panel rounded-2xl border-gray-100 dark:border-gray-800 p-12 text-center">
             <p className="text-gray-400 text-sm">Đang tải ứng viên...</p>
           </div>
         ) : displayedCandidates.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+          <div className="glass-panel rounded-2xl border-gray-100 dark:border-gray-800 p-12 text-center">
             <p className="text-gray-400 text-sm">
               {searchResults ? 'Không tìm thấy ứng viên phù hợp.' : 'Chưa có ứng viên nào.'}
             </p>
           </div>
         ) : (
           displayedCandidates.map((candidate) => {
-            const scoreVal = (candidate.score || 0) * 100
+            // candidate.score is already 0-100 (backend divides overallScore/100)
+            const scoreVal = candidate.score ?? 0
             const scoreColor = scoreVal >= 80 ? 'bg-green-500' : scoreVal >= 60 ? 'bg-blue-500' : 'bg-yellow-500'
             return (
-              <div key={candidate.id} className="bg-white rounded-2xl border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all">
+              <div key={candidate.id} className="glass-panel rounded-2xl border-gray-100 dark:border-gray-800 hover:border-blue-200 dark:hover:border-blue-500/50 hover:shadow-md transition-all">
                 <div className="flex items-center gap-4 px-5 py-4">
                   {/* Avatar */}
                   <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 shadow-sm">
@@ -661,11 +778,11 @@ export function CandidatesPage() {
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center flex-wrap gap-2 mb-0.5">
-                      <p className="font-semibold text-gray-900 truncate">
+                      <p className="font-semibold text-gray-900 dark:text-white truncate">
                         {candidate.firstName} {candidate.lastName}
                       </p>
                       {candidate.campaignName && (
-                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-full truncate max-w-[150px]" title={`${candidate.campaignName} - ${candidate.positionName}`}>
+                        <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-full truncate max-w-[150px]" title={`${candidate.campaignName} - ${candidate.positionName}`}>
                           📁 {candidate.campaignName}
                         </span>
                       )}
@@ -687,8 +804,8 @@ export function CandidatesPage() {
 
                   {/* Score */}
                   <div className="text-right flex-shrink-0">
-                    <div className="text-sm font-bold text-gray-800">{Math.round(scoreVal)}%</div>
-                    <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1">
+                    <div className="text-sm font-bold text-gray-800 dark:text-gray-100">{Math.round(scoreVal)}%</div>
+                    <div className="w-16 h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden mt-1">
                       <div className={`h-full ${scoreColor} rounded-full transition-all`} style={{ width: `${scoreVal}%` }} />
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">Độ phù hợp</p>
@@ -765,14 +882,28 @@ export function CandidatesPage() {
         onClose={() => {
           setShowDetailModal(false)
           setDetailCandidate(null)
+          setDetailError('')
         }}
-        title={selectedDetail ? `${selectedDetail.firstName} ${selectedDetail.lastName}` : 'Candidate Details'}
-        className="w-[min(50rem,calc(100vw-2rem))] max-w-[50rem] max-h-[90vh] overflow-y-auto"
+        title={selectedDetail ? `${selectedDetail.firstName} ${selectedDetail.lastName}` : 'Chi tiết ứng viên'}
+        className="w-[min(50rem,calc(100vw-2rem))] max-w-[50rem]"
       >
         {isDetailLoading && (
-          <p className="text-sm text-muted-foreground">Loading candidate details...</p>
+          <div className="flex items-center justify-center py-16">
+            <span className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
+          </div>
         )}
-        {!isDetailLoading && selectedDetail && (
+        {!isDetailLoading && detailError && (
+          <div className="py-8 text-center">
+            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
+              <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.539-1.333-3.309 0L3.172 15c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-gray-700 mb-1">Không thể tải thông tin</p>
+            <p className="text-xs text-gray-400">{detailError}</p>
+          </div>
+        )}
+        {!isDetailLoading && !detailError && selectedDetail && (
           <div className="space-y-4">
             <div className="flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => setDeleteTargetId(selectedDetail.id)} className="gap-2 text-red-600 hover:text-red-700">
@@ -865,9 +996,9 @@ export function CandidatesPage() {
                 <p className="text-sm font-medium mb-3">Phân tích mức độ phù hợp</p>
                 <div className="grid gap-3 sm:grid-cols-3 mb-4">
                   {[
-                    ['Skills', selectedDetail.screeningResult.skillScore],
-                    ['Education', selectedDetail.screeningResult.educationScore],
-                    ['Experience', selectedDetail.screeningResult.experienceScore],
+                    ['Skills', selectedDetail.screeningResult.skillScore / 100],
+                    ['Education', selectedDetail.screeningResult.educationScore / 100],
+                    ['Experience', selectedDetail.screeningResult.experienceScore / 100],
                   ].map(([label, value]) => (
                     <div key={label} className="rounded-md bg-muted p-3">
                       <p className="text-xs text-muted-foreground">{label}</p>
@@ -875,6 +1006,16 @@ export function CandidatesPage() {
                     </div>
                   ))}
                 </div>
+                
+                <div className="mb-4">
+                  <RadarChart data={[
+                    { subject: 'Skills', A: selectedDetail.screeningResult.skillScore / 100, fullMark: 100 },
+                    { subject: 'Education', A: selectedDetail.screeningResult.educationScore / 100, fullMark: 100 },
+                    { subject: 'Experience', A: selectedDetail.screeningResult.experienceScore / 100, fullMark: 100 },
+                    { subject: 'Overall', A: selectedDetail.screeningResult.overallScore / 100, fullMark: 100 },
+                  ]} />
+                </div>
+
                 {selectedDetail.screeningResult.explanation && (
                   <p className="text-sm text-muted-foreground mb-4">{selectedDetail.screeningResult.explanation}</p>
                 )}
@@ -897,6 +1038,7 @@ export function CandidatesPage() {
           </div>
         )}
       </Modal>
+
 
       <Modal
         isOpen={Boolean(deleteTargetId)}
