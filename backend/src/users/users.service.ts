@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { UpdateProfileDto } from './dto/users.dto';
 
 @Injectable()
 export class UsersService {
@@ -23,6 +24,25 @@ export class UsersService {
 
   updateRole(id: string, role: UserRole) {
     return this.prisma.user.update({ where: { id }, data: { role } });
+  }
+
+  async updateProfile(id: string, dto: UpdateProfileDto) {
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: {
+        fullName: dto.fullName,
+        ...(dto.avatarUrl && { avatarUrl: dto.avatarUrl }),
+      },
+    });
+    return this.toFrontendUser(user);
+  }
+
+  async updateStatus(id: string, isActive: boolean) {
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: { isActive },
+    });
+    return this.toFrontendUser(user);
   }
 
   private toFrontendUser(user: { id: string; email: string; fullName: string; role: UserRole; isActive: boolean; createdAt: Date }) {

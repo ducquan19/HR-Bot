@@ -1,4 +1,6 @@
 import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { UpdateProfileDto, UpdateStatusDto } from './dto/users.dto';
 import { ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -28,5 +30,16 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   updateRole(@Param('id') id: string, @Body('role') role: UserRole) {
     return this.users.updateRole(id, role);
+  }
+
+  @Patch('me')
+  updateProfile(@CurrentUser() user: { id: string }, @Body() dto: UpdateProfileDto) {
+    return this.users.updateProfile(user.id, dto);
+  }
+
+  @Patch(':id/status')
+  @Roles(UserRole.ADMIN)
+  updateStatus(@Param('id') id: string, @Body() dto: UpdateStatusDto) {
+    return this.users.updateStatus(id, dto.isActive);
   }
 }
