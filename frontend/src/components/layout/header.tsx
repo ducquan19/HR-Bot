@@ -9,7 +9,6 @@ import {
   Settings,
   Moon,
   Sun,
-  Bell,
   User,
   LogOut,
   Menu
@@ -17,6 +16,7 @@ import {
 import { useTheme } from '@/contexts/theme-context'
 import { useAuthStore } from '@/stores/auth-store'
 import { getInitials } from '@/lib/utils'
+import { NotificationPanel } from './notification-panel'
 
 const menuItems = [
   { icon: BarChart3, label: 'Tổng quan', href: '/dashboard', badge: null },
@@ -39,7 +39,7 @@ export function Header() {
   }
 
   return (
-    <header className="bg-card border-b border-border sticky top-0 z-30 shadow-sm">
+    <header className="glass-panel border-b border-border sticky top-0 z-30 shadow-sm rounded-none border-x-0 border-t-0">
       <div className="grid grid-cols-2 md:grid-cols-3 items-center px-6 h-16">
         
         {/* Left: Logo */}
@@ -88,10 +88,7 @@ export function Header() {
           </button>
 
           {/* Notifications */}
-          <button onClick={() => alert('Không có thông báo mới')} className="relative p-2 hover:bg-muted rounded-full transition-colors text-muted-foreground hover:text-foreground">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-          </button>
+          <NotificationPanel />
 
           {/* Theme Toggle */}
           <button

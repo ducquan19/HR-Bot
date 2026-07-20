@@ -91,10 +91,21 @@ export class AiController {
   }
 
   @Post(':id/end')
-  async endInterview(@Param('id') id: string) {
+  async endInterview(@Param('id') id: string, @Body() body: any) {
+    const session = await this.prisma.interviewSession.findUnique({ where: { id } });
+    
+    let updatedNotes = session?.notes || '';
+    if (body?.tabSwitches > 0) {
+      const warning = `[ANTI-CHEAT] Detected ${body.tabSwitches} tab switches during interview.\n`;
+      updatedNotes = warning + updatedNotes;
+    }
+
     await this.prisma.interviewSession.update({
       where: { id },
-      data: { status: 'COMPLETED' },
+      data: { 
+        status: 'COMPLETED',
+        notes: updatedNotes !== '' ? updatedNotes : undefined
+      },
     });
     
     // Trigger evaluation worker

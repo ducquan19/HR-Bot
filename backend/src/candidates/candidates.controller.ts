@@ -25,22 +25,6 @@ export class CandidatesController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Get(':id/report.pdf')
-  async downloadReport(@CurrentUser() user: { id: string; role: string }, @Param('id') id: string, @Res() res: Response) {
-    const report = await this.candidates.generateReportPdf(user, id);
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${report.filename}"`);
-    res.setHeader('Content-Length', report.buffer.length);
-    res.send(report.buffer);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get(':id')
-  findOne(@CurrentUser() user: { id: string; role: string }, @Param('id') id: string) {
-    return this.candidates.findOne(user, id);
-  }
-
-  @UseGuards(JwtAuthGuard)
   @Post('upload')
   @UseInterceptors(FileInterceptor('cv', { limits: { fileSize: 10 * 1024 * 1024 } }))
   upload(@CurrentUser() user: { id: string; role: string }, @Body() dto: UploadCandidateDto, @UploadedFile() file: Express.Multer.File) {
@@ -51,6 +35,37 @@ export class CandidatesController {
   @UseInterceptors(FileInterceptor('cv', { limits: { fileSize: 10 * 1024 * 1024 } }))
   publicUpload(@Body() dto: UploadCandidateDto, @UploadedFile() file: Express.Multer.File) {
     return this.candidates.upload(undefined, dto, file);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('score')
+  score(@CurrentUser() user: { id: string; role: string }, @Body() dto: ScoreCandidatesDto) {
+    return this.candidates.score(user, dto);
+  }
+
+  // NOTE: All routes with specific path segments (sub-resources) must be declared
+  // BEFORE the wildcard @Get(':id') to ensure correct NestJS routing precedence.
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/report.pdf')
+  async downloadReport(@CurrentUser() user: { id: string; role: string }, @Param('id') id: string, @Res() res: Response) {
+    const report = await this.candidates.generateReportPdf(user, id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${report.filename}"`);
+    res.setHeader('Content-Length', report.buffer.length);
+    res.send(report.buffer);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':candidateId/cv/:cvId/download')
+  async downloadCv(@CurrentUser() user: { id: string; role: string }, @Param('candidateId') candidateId: string, @Param('cvId') cvId: string) {
+    return this.candidates.getCvDownloadUrl(user, candidateId, cvId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/cv/download')
+  async downloadLatestCv(@CurrentUser() user: { id: string; role: string }, @Param('id') id: string) {
+    return this.candidates.getLatestCvDownloadUrl(user, id);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -65,21 +80,11 @@ export class CandidatesController {
     return this.candidates.remove(user, id);
   }
 
+  // @Get(':id') must be LAST among GET routes to avoid swallowing sub-resource paths.
   @UseGuards(JwtAuthGuard)
-  @Post('score')
-  score(@CurrentUser() user: { id: string; role: string }, @Body() dto: ScoreCandidatesDto) {
-    return this.candidates.score(user, dto);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get(':candidateId/cv/:cvId/download')
-  async downloadCv(@CurrentUser() user: { id: string; role: string }, @Param('candidateId') candidateId: string, @Param('cvId') cvId: string) {
-    return this.candidates.getCvDownloadUrl(user, candidateId, cvId);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get(':id/cv/download')
-  async downloadLatestCv(@CurrentUser() user: { id: string; role: string }, @Param('id') id: string) {
-    return this.candidates.getLatestCvDownloadUrl(user, id);
+  @Get(':id')
+  findOne(@CurrentUser() user: { id: string; role: string }, @Param('id') id: string) {
+    return this.candidates.findOne(user, id);
   }
 }
+

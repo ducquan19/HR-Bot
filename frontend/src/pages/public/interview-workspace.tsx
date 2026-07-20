@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -24,6 +24,18 @@ export function PublicInterviewWorkspacePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [error, setError] = useState('')
+  const tabSwitchesRef = React.useRef(0)
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        tabSwitchesRef.current += 1
+        console.warn('Tab switched! Potential cheating detected.', tabSwitchesRef.current)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [])
 
   useEffect(() => {
     // 1. Fetch Session Info
@@ -65,7 +77,11 @@ export function PublicInterviewWorkspacePage() {
     setIsSubmitted(true)
     // End interview on backend
     try {
-      await fetch(`${API_BASE_URL}/ai/interviews/${session.id}/end`, { method: 'POST' })
+      await fetch(`${API_BASE_URL}/ai/interviews/${session.id}/end`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tabSwitches: tabSwitchesRef.current })
+      })
     } catch (e) {
       console.error(e)
     }
