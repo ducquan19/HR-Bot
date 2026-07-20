@@ -114,7 +114,10 @@ export const api = {
     removeMember: (id: string, memberId: string) => request<{ id: string }>(`/campaigns/${id}/members/${memberId}`, { method: 'DELETE' }),
   },
   users: {
+    list: () => request<User[]>('/users'),
     assignable: () => request<User[]>('/users/assignable'),
+    updateProfile: (payload: { fullName: string; avatarUrl?: string }) => request<User>('/users/me', { method: 'PATCH', body: JSON.stringify(payload) }),
+    updateStatus: (id: string, isActive: boolean) => request<User>(`/users/${id}/status`, { method: 'PATCH', body: JSON.stringify({ isActive }) }),
   },
   candidates: {
     list: (filters: CandidateFilters = {}) => {
@@ -160,4 +163,25 @@ export const api = {
   applicationForms: {
     publicFind: (token: string) => request<PublicApplicationForm>(`/application-forms/public/${token}`),
   },
+  notifications: {
+    list: () => request<AppNotification[]>('/notifications'),
+  },
+}
+
+export interface AppNotification {
+  id: string;
+  type:
+    | 'campaign_deadline_urgent'
+    | 'campaign_deadline_soon'
+    | 'campaign_created'
+    | 'campaign_closed'
+    | 'new_candidates'
+    | 'interview_upcoming'
+    | 'cv_processing_complete'
+    | 'high_score_candidate';
+  title: string;
+  message: string;
+  createdAt: string;
+  link?: string;
+  metadata?: Record<string, any>;
 }

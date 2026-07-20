@@ -4,6 +4,27 @@ import { v4 as uuid } from 'uuid';
 
 const prisma = new PrismaClient();
 
+const FIRST_NAMES = [
+  'Nguyễn Văn', 'Trần Thị', 'Lê Minh', 'Phạm Thị', 'Hoàng Đức',
+  'Vũ Thị', 'Đặng Quốc', 'Bùi Thị', 'Đỗ Minh', 'Ngô Thị',
+  'Dương Văn', 'Lý Thị', 'Hồ Minh', 'Đinh Thị', 'Trương Công',
+  'Võ Thị', 'Huỳnh Minh', 'Lâm Thị', 'Phan Văn', 'Chu Thị',
+];
+const LAST_NAMES = [
+  'An', 'Bình', 'Chi', 'Dũng', 'Em',
+  'Giang', 'Hà', 'Khoa', 'Lan', 'Minh',
+  'Nam', 'Oanh', 'Phúc', 'Quân', 'Sơn',
+  'Tâm', 'Uyên', 'Vinh', 'Xuân', 'Yến',
+  'Hương', 'Thành', 'Long', 'Linh', 'Hùng',
+  'Thảo', 'Tùng', 'Mai', 'Khánh', 'Đức',
+];
+
+function randomName(index: number): { firstName: string; lastName: string } {
+  const first = FIRST_NAMES[index % FIRST_NAMES.length];
+  const last = LAST_NAMES[Math.floor(index * 1.7 + 3) % LAST_NAMES.length];
+  return { firstName: first, lastName: last };
+}
+
 async function main() {
   const passwordHash = await bcrypt.hash('password', 12);
   const admin = await prisma.user.upsert({
@@ -94,6 +115,29 @@ async function main() {
   const stages = ['APPLIED', 'SCREENING', 'VIRTUAL_INTERVIEW', 'HR_REVIEW', 'TEST', 'REAL_INTERVIEW', 'OFFER', 'REJECTED'];
   const recommendations = ['STRONG_RECOMMEND', 'RECOMMEND', 'CONSIDER', 'REJECT'];
 
+  // Score distribution: realistic bell curve 40-95%
+  // overallScore is stored on scale 0-10000 (divide by 100 to get %)
+  const scoreDistributions = [
+    { min: 8500, max: 9800 }, // top tier ~15%
+    { min: 7000, max: 8500 }, // good ~30%
+    { min: 5500, max: 7000 }, // average ~35%
+    { min: 3000, max: 5500 }, // below average ~20%
+  ];
+  const weights = [15, 30, 35, 20];
+  
+  function weightedRandomScore(): number {
+    const rand = Math.random() * 100;
+    let cumulative = 0;
+    for (let w = 0; w < weights.length; w++) {
+      cumulative += weights[w];
+      if (rand <= cumulative) {
+        const { min, max } = scoreDistributions[w];
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      }
+    }
+    return 6000;
+  }
+
   console.log("Seeding candidates...");
   for (let i = 0; i < 50; i++) {
     const campaign = campaigns[Math.floor(Math.random() * campaigns.length)];
@@ -104,12 +148,19 @@ async function main() {
     const shuffledSkills = [...skills].sort(() => 0.5 - Math.random());
     const candidateSkills = shuffledSkills.slice(0, numSkills);
 
+    const { firstName, lastName } = randomName(i);
+
+    const overallScore = weightedRandomScore();
+    const skillScore = Math.min(10000, Math.max(0, overallScore + Math.floor((Math.random() - 0.5) * 2000)));
+    const experienceScore = Math.min(10000, Math.max(0, overallScore + Math.floor((Math.random() - 0.5) * 2500)));
+    const educationScore = Math.min(10000, Math.max(0, overallScore + Math.floor((Math.random() - 0.5) * 1500)));
+
     const profile = await prisma.candidateProfile.create({
       data: {
-        firstName: `Candidate${i}`,
-        lastName: `Test`,
+        firstName,
+        lastName,
         email: `candidate-${uuid()}@example.com`,
-        phone: `+123456789${i.toString().padStart(2, '0')}`,
+        phone: `+84${Math.floor(Math.random() * 900000000) + 100000000}`,
         skills: {
           create: candidateSkills.map(s => ({ skillId: s.id }))
         },
@@ -155,10 +206,10 @@ async function main() {
         currentStage: stages[Math.floor(Math.random() * stages.length)] as any,
         screeningResult: {
           create: {
-            overallScore: Math.floor(Math.random() * 5500) + 4000,
-            skillScore: Math.floor(Math.random() * 5500) + 4000,
-            experienceScore: Math.floor(Math.random() * 5500) + 4000,
-            educationScore: Math.floor(Math.random() * 3500) + 6000,
+            overallScore,
+            skillScore,
+            experienceScore,
+            educationScore,
             recommendation: recommendations[Math.floor(Math.random() * recommendations.length)] as any,
             explanation: 'Good match based on resume and requirements.',
             strengths: ['Problem Solving', 'Teamwork'],

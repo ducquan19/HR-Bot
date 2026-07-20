@@ -378,10 +378,10 @@ export function CampaignsPage() {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Quản lý chiến dịch</h1>
-          <p className="text-muted-foreground">Quản lý các chiến dịch tuyển dụng và vị trí công việc</p>
+          <h1 className="text-3xl font-bold mb-2 text-gray-900 dark:text-white">Quản lý chiến dịch</h1>
+          <p className="text-muted-foreground dark:text-gray-400">Quản lý các chiến dịch tuyển dụng và vị trí công việc</p>
         </div>
         <Button onClick={() => setIsModalOpen(true)} className="gap-2">
           <Plus className="w-4 h-4" />
@@ -395,52 +395,60 @@ export function CampaignsPage() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5 flex items-center justify-between transition-all hover:shadow-md">
-          <div>
-            <p className="text-sm font-semibold text-gray-500 mb-1">Đang hoạt động</p>
-            <div className="text-3xl font-black text-gray-900">{activeCampaigns.length}</div>
-            <p className="text-[11px] text-gray-400 mt-1 font-medium">Chiến dịch đang mở</p>
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 mb-8">
+        <div className="flex flex-wrap gap-3">
+        <div className="flex items-center gap-3 glass-panel rounded-xl px-4 py-2.5 hover:shadow-md transition-all border border-gray-200 dark:border-gray-800">
+          <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center border border-blue-100 dark:border-blue-800/50 shrink-0">
+            <TrendingUp className="w-4 h-4 text-blue-600 dark:text-blue-400" />
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center border border-blue-100">
-            <TrendingUp className="w-6 h-6 text-blue-600" />
+          <div>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-none mb-0.5">Đang hoạt động</p>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-xl font-black text-gray-900 dark:text-white leading-none">{activeCampaigns.length}</span>
+              <span className="text-xs text-gray-400">chiến dịch</span>
+            </div>
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5 flex items-center justify-between transition-all hover:shadow-md">
-          <div>
-            <p className="text-sm font-semibold text-gray-500 mb-1">Tổng ứng viên</p>
-            <div className="text-3xl font-black text-gray-900">{candidates.length}</div>
-            <p className="text-[11px] text-gray-400 mt-1 font-medium">Trong tất cả chiến dịch</p>
+        <div className="flex items-center gap-3 glass-panel rounded-xl px-4 py-2.5 hover:shadow-md transition-all border border-gray-200 dark:border-gray-800">
+          <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center border border-purple-100 dark:border-purple-800/50 shrink-0">
+            <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center border border-purple-100">
-            <Users className="w-6 h-6 text-purple-600" />
+          <div>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-none mb-0.5">Tổng ứng viên</p>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-xl font-black text-gray-900 dark:text-white leading-none">{candidates.length}</span>
+              <span className="text-xs text-gray-400">ứng viên</span>
+            </div>
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5 flex items-center justify-between transition-all hover:shadow-md">
+        <div className="flex items-center gap-3 glass-panel rounded-xl px-4 py-2.5 hover:shadow-md transition-all border border-gray-200 dark:border-gray-800">
+          <div className="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-900/30 flex items-center justify-center border border-orange-100 dark:border-orange-800/50 shrink-0">
+            <Archive className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+          </div>
           <div>
-            <p className="text-sm font-semibold text-gray-500 mb-1">Đã đóng</p>
-            <div className="text-3xl font-black text-gray-900">{archivedCampaigns.length}</div>
-            <p className="text-[11px] text-gray-400 mt-1 font-medium">Chiến dịch lưu trữ</p>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-none mb-0.5">Đã đóng</p>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-xl font-black text-gray-900 dark:text-white leading-none">{archivedCampaigns.length}</span>
+              <span className="text-xs text-gray-400">chiến dịch</span>
+            </div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center border border-orange-100">
-            <Archive className="w-6 h-6 text-orange-600" />
-          </div>
+        </div>
+        </div>
+        <div className="w-full xl:w-[400px] shrink-0">
+          <Input
+            placeholder="Tìm kiếm theo tên chiến dịch hoặc phòng ban..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full h-11 text-sm bg-white dark:bg-slate-900/60 shadow-sm rounded-xl border-gray-200 dark:border-gray-800"
+          />
         </div>
       </div>
 
       <div className="mb-8">
-        <div className="flex flex-col sm:flex-row items-center mb-6 gap-6 relative">
-          <h2 className="text-xl font-bold whitespace-nowrap">Chiến dịch đang hoạt động</h2>
-          <div className="w-full sm:w-[400px] sm:absolute sm:left-1/2 sm:-translate-x-1/2">
-            <Input
-              placeholder="Tìm kiếm theo tên chiến dịch hoặc phòng ban..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-10 text-sm bg-white shadow-sm"
-            />
-          </div>
+        <div className="mb-6">
+          <h2 className="text-xl font-bold">Chiến dịch đang hoạt động</h2>
         </div>
         {isLoading ? (
           <Card>

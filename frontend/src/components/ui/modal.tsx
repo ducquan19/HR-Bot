@@ -1,4 +1,5 @@
 import React from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 
 interface ModalProps {
@@ -15,19 +16,19 @@ interface ModalProps {
 export function Modal({ isOpen, onClose, title, children, footer, className, hideHeader, contentClassName }: ModalProps) {
   if (!isOpen) return null
 
-  return (
+  return createPortal(
     <>
       <div
         className="fixed inset-0 bg-black/50 z-40"
         onClick={onClose}
       />
-      <div 
-        className="fixed inset-0 z-50 flex items-center justify-center"
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
         onClick={onClose}
       >
         <div
           className={cn(
-            'relative bg-card text-card-foreground rounded-lg shadow-lg w-full mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden',
+            'relative bg-card text-card-foreground rounded-lg shadow-lg w-full max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden',
             className ?? 'max-w-lg'
           )}
           onClick={(e) => e.stopPropagation()}
@@ -55,6 +56,8 @@ export function Modal({ isOpen, onClose, title, children, footer, className, hid
           )}
         </div>
       </div>
-    </>
+    </>,
+    document.body
   )
 }
+

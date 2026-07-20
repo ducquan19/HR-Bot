@@ -7,6 +7,7 @@ export interface User {
   name: string
   role: UserRole
   avatar?: string
+  isActive?: boolean
   createdAt: string
 }
 

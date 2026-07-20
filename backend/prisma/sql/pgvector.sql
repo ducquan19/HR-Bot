@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS candidate_embeddings (
   source_type VARCHAR(50) NOT NULL DEFAULT 'profile',
   source_id UUID,
   content TEXT NOT NULL,
-  embedding vector(1536),
+  embedding vector(384),
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
