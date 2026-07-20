@@ -15,9 +15,19 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { SearchModule } from './search/search.module';
 import { MailModule } from './mail/mail.module';
+import { NotificationsModule } from './notifications/notifications.module';
+
+
+import { GraphQLModule } from '@nestjs/graphql';
+import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 
 @Module({
   imports: [
+    GraphQLModule.forRoot<ApolloDriverConfig>({
+      driver: ApolloDriver,
+      autoSchemaFile: true,
+      playground: true,
+    }),
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
@@ -42,6 +52,7 @@ import { MailModule } from './mail/mail.module';
     RealtimeModule,
     SearchModule,
     MailModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [],
