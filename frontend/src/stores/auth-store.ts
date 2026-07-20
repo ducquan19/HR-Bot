@@ -13,6 +13,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   register: (email: string, password: string, name: string) => Promise<void>
+  updateProfile: (fullName: string, avatarUrl?: string) => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -40,6 +41,15 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       localStorage.removeItem('hrbot_access_token')
       set({ user: null, isAuthenticated: false, isLoading: false })
+    }
+  },
+
+  updateProfile: async (fullName: string, avatarUrl?: string) => {
+    try {
+      const updatedUser = await api.users.updateProfile({ fullName, avatarUrl })
+      set({ user: updatedUser })
+    } catch (error) {
+      throw error
     }
   },
 
