@@ -774,8 +774,8 @@ export function CandidatesPage() {
             return (
               <>
                 {paginatedCandidates.map((candidate) => {
-                  // candidate.score is already 0-100 (backend divides overallScore/100)
-                  const scoreVal = candidate.score ?? 0
+                  // candidate.score is 0-1 (backend divides overallScore/100)
+                  const scoreVal = (candidate.score ?? 0) * 100
                   const scoreColor = scoreVal >= 80 ? 'bg-green-500' : scoreVal >= 60 ? 'bg-blue-500' : 'bg-yellow-500'
                   return (
                     <div key={candidate.id} className="glass-panel rounded-2xl border-gray-100 dark:border-gray-800 hover:border-blue-200 dark:hover:border-blue-500/50 hover:shadow-md transition-all">
@@ -935,8 +935,9 @@ export function CandidatesPage() {
             </div>
           )}
           </>
-          )
-        })()}
+            )
+          })()
+        )}
       </div>
 
       <Modal
