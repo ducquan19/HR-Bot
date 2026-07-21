@@ -17,10 +17,7 @@ export class DashboardService {
     };
 
     const candidateWhere = isAdmin ? {} : {
-      OR: [
-        { cvs: { some: { uploadedById: userId } } },
-        { applications: { some: { campaignPosition: { campaign: campaignWhere } } } }
-      ]
+      applications: { some: { campaignPosition: { campaign: campaignWhere } } }
     };
 
     const applicationWhere = isAdmin ? {} : {
