@@ -239,14 +239,14 @@ export class NotificationsService {
       const name = `${profile.firstName} ${profile.lastName}`;
       const app = profile.applications[0];
       const score = app?.screeningResult?.overallScore;
-      const scorePercent = score !== undefined ? Math.round(score / 100) : null;
+      const scorePercent = score !== undefined ? Math.round(score) : null;
 
       if (scorePercent !== null && scorePercent >= 85) {
         highScorers.push({
           id: `high_score_${cv.id}`,
           type: 'high_score_candidate',
           title: '⭐ Ứng viên xuất sắc',
-          message: `${name} đạt ${scorePercent}% độ phù hợp — đáng xem xét ngay!`,
+          message: `${name} đạt ${scorePercent}% độ phù hợp - đáng xem xét ngay!`,
           createdAt: cv.updatedAt.toISOString(),
           link: '/candidates',
           metadata: { score: scorePercent },
@@ -256,7 +256,7 @@ export class NotificationsService {
           id: `cv_done_${cv.id}`,
           type: 'cv_processing_complete',
           title: '🤖 Phân tích CV hoàn tất',
-          message: `CV của ${name}${scorePercent !== null ? ` — ${scorePercent}% phù hợp` : ''} đã được phân tích xong`,
+          message: `CV của ${name}${scorePercent !== null ? ` - ${scorePercent}% phù hợp` : ''} đã được phân tích xong`,
           createdAt: cv.updatedAt.toISOString(),
           link: '/candidates',
           metadata: { score: scorePercent },
