@@ -5,17 +5,46 @@ import { PrismaService } from '../prisma/prisma.service';
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async summary() {
+  async summary(user: { sub: string, role: string }) {
+    const isAdmin = user.role === 'ADMIN' || user.role === 'admin';
+    const userId = user.sub;
+
+    const campaignWhere = isAdmin ? {} : {
+      OR: [
+        { createdById: userId },
+        { members: { some: { userId } } }
+      ]
+    };
+
+    const candidateWhere = isAdmin ? {} : {
+      OR: [
+        { cvs: { some: { uploadedById: userId } } },
+        { applications: { some: { campaignPosition: { campaign: campaignWhere } } } }
+      ]
+    };
+
+    const applicationWhere = isAdmin ? {} : {
+      campaignPosition: {
+        campaign: campaignWhere
+      }
+    };
+
     const [activeCampaigns, totalCandidates, applied, screeningDone, interviews, offers, rejected, scores, topSkills] = await Promise.all([
-      this.prisma.recruitmentCampaign.count({ where: { status: 'ACTIVE' } }),
-      this.prisma.candidateProfile.count(),
-      this.prisma.candidateApplication.count({ where: { currentStage: 'APPLIED' } }),
-      this.prisma.candidateApplication.count({ where: { NOT: { currentStage: 'APPLIED' } } }),
-      this.prisma.interviewSession.count(),
-      this.prisma.candidateApplication.count({ where: { currentStage: 'OFFER' } }),
-      this.prisma.candidateApplication.count({ where: { currentStage: 'REJECTED' } }),
-      this.prisma.screeningResult.findMany({ select: { overallScore: true } }),
-      this.prisma.candidateSkill.groupBy({ by: ['skillId'], _count: { skillId: true }, orderBy: { _count: { skillId: 'desc' } }, take: 10 }),
+      this.prisma.recruitmentCampaign.count({ where: { status: 'ACTIVE', ...campaignWhere } }),
+      this.prisma.candidateProfile.count({ where: candidateWhere }),
+      this.prisma.candidateApplication.count({ where: { currentStage: 'APPLIED', ...applicationWhere } }),
+      this.prisma.candidateApplication.count({ where: { NOT: { currentStage: 'APPLIED' }, ...applicationWhere } }),
+      this.prisma.interviewSession.count({ where: { application: applicationWhere } }),
+      this.prisma.candidateApplication.count({ where: { currentStage: 'OFFER', ...applicationWhere } }),
+      this.prisma.candidateApplication.count({ where: { currentStage: 'REJECTED', ...applicationWhere } }),
+      this.prisma.screeningResult.findMany({ where: { application: applicationWhere }, select: { overallScore: true } }),
+      this.prisma.candidateSkill.groupBy({ 
+        by: ['skillId'], 
+        _count: { skillId: true }, 
+        where: { candidateProfile: candidateWhere },
+        orderBy: { _count: { skillId: 'desc' } }, 
+        take: 10 
+      }),
     ]);
 
     const skills = await this.prisma.skill.findMany({ where: { id: { in: topSkills.map((s) => s.skillId) } } });
