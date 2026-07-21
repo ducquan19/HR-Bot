@@ -90,3 +90,8 @@ Dự án được xây dựng với tư duy Scale-out (mở rộng ngang) như m
 - **Prisma (Next-generation ORM):** Thay vì viết SQL thuần hoặc dùng các ORM cũ (như TypeORM/Sequelize), dự án sử dụng Prisma để đảm bảo Type-safe tuyệt đối từ Database lên tới tận Frontend, tự động sinh ra các Type của TypeScript và quản lý Migration dễ dàng.
 - **MinIO (S3-Compatible Object Storage):** CV của ứng viên (file PDF) không lưu thẳng vào ổ cứng Server (cách làm truyền thống dễ gây quá tải và khó backup) mà được lưu vào hệ thống MinIO. Đây là một Object Storage mô phỏng hoàn toàn chuẩn API của Amazon S3, sẵn sàng đưa lên Cloud bất cứ lúc nào.
 - **MailHog (Local SMTP Testing):** Hệ thống có tính năng gửi Email (ví dụ: thông báo trúng tuyển, gửi OTP). Để tránh spam mail thật trong lúc phát triển và test, dự án tích hợp MailHog để hứng toàn bộ các email được gửi đi, cung cấp giao diện Web (UI) để lập trình viên xem nội dung Email ngay lập tức.
+
+## 10. Tích hợp CI/CD với GitHub Actions & Gitleaks
+Hệ thống áp dụng các quy trình phát triển hiện đại (DevOps) để đảm bảo chất lượng và bảo mật mã nguồn:
+- **GitHub Actions (CI Pipeline):** Tự động hóa quá trình kiểm thử và đóng gói. Mỗi khi có thay đổi mã nguồn (Push/Pull Request), GitHub Actions sẽ tự động cài đặt dependency, chạy Linter và Build ứng dụng (cả Frontend và Backend) trong môi trường tĩnh, đảm bảo code không bị lỗi trước khi Merge.
+- **Gitleaks (Kiểm soát bảo mật):** Tích hợp công cụ Gitleaks vào quy trình CI. Công cụ này quét toàn bộ lịch sử commit để ngăn chặn việc rò rỉ (leak) các thông tin nhạy cảm như API Keys, Secret Tokens, hoặc mật khẩu Database bị vô tình đẩy lên kho lưu trữ mã nguồn.
