@@ -37,12 +37,14 @@ export function PublicInterviewWorkspacePage() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [])
 
+  const [isConnected, setIsConnected] = useState(false)
+
   useEffect(() => {
     // 1. Fetch Session Info
     api.interviews.publicFind(token)
       .then((data) => {
         setSession(data)
-        if (data.status === 'completed') {
+        if (data.status === 'completed' || data.status === 'COMPLETED') {
           setIsSubmitted(true)
           return
         }
@@ -74,6 +76,12 @@ export function PublicInterviewWorkspacePage() {
 
   const handleDisconnect = async () => {
     if (!session) return
+    
+    if (!isConnected) {
+      setError('Connection to the voice server failed. Please check if the LiveKit server is running.')
+      return
+    }
+
     setIsSubmitted(true)
     // End interview on backend
     try {
@@ -150,6 +158,7 @@ export function PublicInterviewWorkspacePage() {
               connect={true}
               audio={true}
               video={false}
+              onConnected={() => setIsConnected(true)}
               onDisconnected={handleDisconnect}
               className="w-full flex-1 flex flex-col relative"
             >
