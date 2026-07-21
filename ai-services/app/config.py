@@ -9,10 +9,12 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-_REPO_ROOT = Path(os.environ.get("GREENTEMIS_REPO_ROOT", Path(__file__).resolve().parents[2]))
+_REPO_ROOT = Path(os.environ.get("HR_BOT_REPO_ROOT", Path(__file__).resolve().parents[2]))
 _CONFIG_FILE = _REPO_ROOT / "configs" / "ai-services.yml"
 _DOTENV_SECRET_FIELDS = {
     "openai_api_key",
+    "gemini_api_key",
+    "groq_api_key",
     "livekit_api_key",
     "livekit_api_secret",
     "stt_api_key",
@@ -87,6 +89,8 @@ class Settings(BaseSettings):
     # Planning Agent — OpenAI-compatible provider. Non-secret defaults live in
     # configs/ai-services.yml. Secrets (OPENAI_API_KEY) go in repo-root .env.
     openai_api_key: str = ""
+    gemini_api_key: str = ""
+    groq_api_key: str = ""
     openai_base_url: str = ""
     planning_model: str = ""
     planning_temperature: float = 0.4

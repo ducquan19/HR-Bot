@@ -10,6 +10,7 @@ openai
 # Interview TTS — Vietnamese text normalization (numbers/dates/units + acronym
 # tagging) before synthesis. See app/infra/tts/__init__.py.
 sea-g2p==0.7.6
+edge-tts==7.2.8
 
 # Judge Agent — báo cáo đánh giá: markdown → PDF (thuần Python, không cần system lib)
 markdown==3.7

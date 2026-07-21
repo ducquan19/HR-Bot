@@ -83,7 +83,9 @@ def normalize_vietnamese_tts_text(text: str) -> str:
     return _STRAY_TAG_RE.sub("", spelled)
 
 
-class VietnameseNormalizingTTS(openai.TTS):
+from .edge_tts_plugin import EdgeTTS
+
+class VietnameseNormalizingTTS(EdgeTTS):
     """TTS that normalizes Vietnamese text (acronym spelling) before synthesis."""
 
     def synthesize(
@@ -98,27 +100,14 @@ class VietnameseNormalizingTTS(openai.TTS):
         )
 
 
-def build_tts(settings: Settings, language: str | None = None) -> openai.TTS:
-    """Build the TTS plugin for the session language (falls back to settings)."""
+def build_tts(settings: Settings, language: str | None = None):
     lang = (language or settings.language or "en").lower()
-    tts_cls = openai.TTS
+    
+    # We ignore the kokoro/openai configs and strictly use our free EdgeTTS plugin.
+    # We use VietnameseNormalizingTTS so acronyms like RAG still sound natural.
     if lang == "vi":
-        base_url = settings.tts_vi_base_url
-        api_key = settings.tts_vi_api_key or "local"
-        model = settings.tts_vi_model
-        voice = settings.tts_vi_voice
-        tts_cls = VietnameseNormalizingTTS
+        voice = "vi-VN-HoaiMyNeural"
+        return VietnameseNormalizingTTS(voice=voice)
     else:
-        base_url = settings.tts_base_url
-        # The openai plugin rejects an empty key at construction; fall back to a
-        # placeholder so the worker still builds when KOKORO_API_KEY is unset.
-        api_key = settings.kokoro_api_key or "local"
-        model = settings.tts_model
-        voice = settings.tts_voice
-    return tts_cls(
-        model=model,
-        voice=voice,
-        base_url=base_url,
-        api_key=api_key,
-        response_format=settings.tts_response_format,
-    )
+        voice = "en-US-AriaNeural"
+        return EdgeTTS(voice=voice)

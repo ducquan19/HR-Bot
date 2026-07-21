@@ -9,15 +9,12 @@ def build_stt(settings: Settings, language: str | None = None) -> openai.STT:
     Vietnamese sessions use a dedicated model/endpoint (stt_vi_*); all other
     languages use the default English STT config (stt_*).
     """
-    lang = (language or settings.language or "en").lower()
-    if lang == "vi":
-        base_url = settings.stt_vi_base_url
-        api_key = settings.stt_vi_api_key or "local"
-        model = settings.stt_vi_model
-    else:
-        base_url = settings.stt_base_url
-        api_key = settings.stt_api_key or "local"
-        model = settings.stt_model
+    # We use Groq's extremely fast Whisper endpoint for free STT.
+    # The livekit openai.STT plugin is compatible with any OpenAI-like API.
+    base_url = "https://api.groq.com/openai/v1"
+    api_key = settings.groq_api_key or "gsk_missing_key"
+    model = "whisper-large-v3"
+    
     return openai.STT(
         language=lang,
         model=model,
