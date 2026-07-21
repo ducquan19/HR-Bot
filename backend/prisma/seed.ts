@@ -29,13 +29,13 @@ async function main() {
   const passwordHash = await bcrypt.hash('password', 12);
   const admin = await prisma.user.upsert({
     where: { email: 'admin@hrbot.com' },
-    update: {},
-    create: { email: 'admin@hrbot.com', passwordHash, fullName: 'HR Bot Admin', role: UserRole.ADMIN },
+    update: { isEmailVerified: true },
+    create: { email: 'admin@hrbot.com', passwordHash, fullName: 'HR Bot Admin', role: UserRole.ADMIN, isEmailVerified: true },
   });
   const recruiter = await prisma.user.upsert({
     where: { email: 'recruiter@hrbot.com' },
-    update: {},
-    create: { email: 'recruiter@hrbot.com', passwordHash, fullName: 'Demo Recruiter', role: UserRole.RECRUITER },
+    update: { isEmailVerified: true },
+    create: { email: 'recruiter@hrbot.com', passwordHash, fullName: 'Demo Recruiter', role: UserRole.RECRUITER, isEmailVerified: true },
   });
 
   const skillNames = ['React', 'TypeScript', 'Node.js', 'PostgreSQL', 'Docker', 'Redis', 'Python', 'AWS', 'Kubernetes', 'Java', 'C++', 'Go', 'Figma', 'UI/UX'];

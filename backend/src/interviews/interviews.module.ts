@@ -4,11 +4,13 @@ import { INTERVIEW_QUEUE, QueueModule } from '../queue/queue.module';
 import { AiModule } from '../ai/ai.module';
 import { MailModule } from '../mail/mail.module';
 import { InterviewsController } from './interviews.controller';
+import { AiInterviewsController } from './ai-interviews.controller';
 import { InterviewsService } from './interviews.service';
 
 @Module({
   imports: [QueueModule, BullModule.registerQueue({ name: INTERVIEW_QUEUE }), AiModule, MailModule],
-  controllers: [InterviewsController],
+  controllers: [InterviewsController, AiInterviewsController],
   providers: [InterviewsService],
+  exports: [InterviewsService],
 })
 export class InterviewsModule {}

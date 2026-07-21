@@ -3,6 +3,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuid } from 'uuid';
+import { AccessToken } from 'livekit-server-sdk';
 import { InterviewStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
@@ -87,6 +88,34 @@ export class InterviewsService {
     });
     if (!session || session.expiresAt < new Date()) throw new NotFoundException('Interview link is invalid or expired');
     return session;
+  }
+
+  async generateLiveKitToken(token: string) {
+    const session = await this.findPublic(token);
+    
+    // Create token
+    const apiKey = process.env.LIVEKIT_API_KEY || 'devkey';
+    const apiSecret = process.env.LIVEKIT_API_SECRET || 'devsecret';
+    
+    const candidateName = `${session.application.candidateProfile.firstName} ${session.application.candidateProfile.lastName}`;
+    const participantIdentity = `candidate_${session.id}`;
+
+    const at = new AccessToken(apiKey, apiSecret, {
+      identity: participantIdentity,
+      name: candidateName,
+    });
+    
+    at.addGrant({
+      roomJoin: true,
+      room: session.id,
+      canPublish: true,
+      canSubscribe: true,
+    });
+
+    return {
+      accessToken: await at.toJwt(),
+      url: process.env.LIVEKIT_URL || 'ws://localhost:7880',
+    };
   }
 
   async submitPublic(token: string, dto: SubmitInterviewDto) {

@@ -108,15 +108,17 @@ model User {
   role         UserRole @default(RECRUITER)
   googleId     String?  @unique @map("google_id")
   avatarUrl    String?  @map("avatar_url")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  isActive        Boolean  @default(true) @map("is_active")
+  isEmailVerified Boolean  @default(false) @map("is_email_verified")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   campaigns       RecruitmentCampaign[] @relation("CampaignCreatedBy")
   cvs             Cv[]                  @relation("CvUploadedBy")
   activityLogs    ActivityLog[]
   refreshTokens   RefreshToken[]
   resetTokens     PasswordResetToken[]
+  verificationTokens EmailVerificationToken[]
   interviewSessions InterviewSession[]  @relation("InterviewCreatedBy")
   campaignMemberships CampaignMember[]
 
@@ -149,6 +151,20 @@ model PasswordResetToken {
 
   @@index([userId])
   @@map("password_reset_tokens")
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("email_verification_tokens")
 }
 
 model RecruitmentCampaign {
