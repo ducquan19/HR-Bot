@@ -8,18 +8,110 @@ Dưới đây là sơ đồ kiến trúc và giải thích các bảng cốt lõ
 
 ## 1. Sơ Đồ Thực Thể (ERD - Lõi Tuyển Dụng)
 
+Sơ đồ ERD dưới đây mô tả cấu trúc các bảng chính cùng với các thuộc tính cốt lõi và mối quan hệ giữa chúng.
+
 ```mermaid
 erDiagram
+    User {
+        uuid id PK
+        string email UK
+        string passwordHash
+        string fullName
+        enum role "ADMIN, RECRUITER"
+        boolean isActive
+    }
+    
+    RecruitmentCampaign {
+        uuid id PK
+        string title
+        string department
+        datetime deadline
+        enum status "ACTIVE, CLOSED"
+        uuid createdById FK
+    }
+    
+    JobPosition {
+        uuid id PK
+        string title
+        string department
+        enum employmentType
+        string seniority
+    }
+    
+    CampaignPosition {
+        uuid id PK
+        uuid campaignId FK
+        uuid positionId FK
+        int vacancies
+        json salary
+        enum status
+    }
+    
+    JobDescription {
+        uuid id PK
+        uuid positionId FK
+        string[] requirements
+        string[] responsibilities
+    }
+    
+    CandidateProfile {
+        uuid id PK
+        string firstName
+        string lastName
+        string email
+        string phone
+        string expectedSalary
+    }
+    
+    Cv {
+        uuid id PK
+        uuid candidateProfileId FK
+        string originalFilename
+        string storagePath
+        enum processingStatus
+    }
+    
+    AiExtraction {
+        uuid id PK
+        uuid cvId FK
+        json parsedJson
+    }
+    
+    CandidateApplication {
+        uuid id PK
+        uuid candidateProfileId FK
+        uuid campaignPositionId FK
+        uuid cvId FK
+        enum currentStage
+    }
+    
+    ScreeningResult {
+        uuid id PK
+        uuid applicationId FK
+        float overallScore
+        json strengths
+        json missingSkills
+    }
+    
+    InterviewSession {
+        uuid id PK
+        uuid applicationId FK
+        string meetingUrl
+        enum status
+        json transcript
+        json aiEvaluation
+    }
+
     User ||--o{ RecruitmentCampaign : "Tạo bởi"
-    User ||--o{ InterviewSession : "Điều phối"
     RecruitmentCampaign ||--o{ CampaignPosition : "Bao gồm"
     JobPosition ||--o{ CampaignPosition : "Tuyển dụng cho"
-    CampaignPosition ||--o{ CandidateApplication : "Nhận"
-    CandidateProfile ||--o{ CandidateApplication : "Nộp"
+    JobPosition ||--o| JobDescription : "Mô tả bởi"
+    CandidateProfile ||--o{ CandidateApplication : "Nộp đơn"
     CandidateProfile ||--o{ Cv : "Sở hữu"
+    Cv ||--o{ AiExtraction : "Trích xuất thành"
+    CampaignPosition ||--o{ CandidateApplication : "Nhận đơn"
     CandidateApplication ||--o| ScreeningResult : "Có kết quả AI"
     CandidateApplication ||--o{ InterviewSession : "Có lịch phỏng vấn"
-    Cv ||--o{ AiExtraction : "Được trích xuất"
 ```
 
 ---
