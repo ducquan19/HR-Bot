@@ -81,6 +81,7 @@ services:
     env_file:
       - ./ai-services/.env
     environment:
+      AGENT_MODE: interview
       LIVEKIT_URL: ws://livekit:7880
       LIVEKIT_API_KEY: devkey
       LIVEKIT_API_SECRET: devsecret
