@@ -25,6 +25,12 @@ export class MailService {
     await this.safeSend(email, 'Reset your HR Bot password', `Open this link to reset your password: ${url}`);
   }
 
+  async sendVerificationEmail(email: string, token: string) {
+    const frontendUrl = this.config.get<string>('frontendUrl');
+    const url = `${frontendUrl}/verify-email?token=${token}`;
+    await this.safeSend(email, 'Verify your HR Bot email', `Welcome to HR Bot! Please open this link to verify your email address: ${url}`);
+  }
+
   async sendInterviewInvite(email: string, link: string) {
     await this.safeSend(email, 'HR Bot virtual interview invitation', `You have been invited to a virtual interview: ${link}`);
   }
