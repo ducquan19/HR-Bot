@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -37,6 +37,18 @@ export class AuthController {
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.auth.resetPassword(dto);
+  }
+
+  @Post('verify-email')
+  verifyEmail(@Body() dto: { token: string }) {
+    if (!dto.token) throw new BadRequestException('Token is required');
+    return this.auth.verifyEmail(dto.token);
+  }
+
+  @Post('resend-verification')
+  resendVerification(@Body() dto: { email: string }) {
+    if (!dto.email) throw new BadRequestException('Email is required');
+    return this.auth.resendVerificationEmail(dto.email);
   }
 
   @UseGuards(JwtAuthGuard)

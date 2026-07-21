@@ -45,6 +45,11 @@ export class InterviewsController {
     return this.interviews.findPublic(token);
   }
 
+  @Post('public/:token/join')
+  async joinRoom(@Param('token') token: string) {
+    return this.interviews.generateLiveKitToken(token);
+  }
+
   @Post('public/:token/submit')
   submitPublic(@Param('token') token: string, @Body() dto: SubmitInterviewDto) {
     return this.interviews.submitPublic(token, dto);

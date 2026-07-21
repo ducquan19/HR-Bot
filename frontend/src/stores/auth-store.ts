@@ -12,7 +12,7 @@ interface AuthState {
   loadCurrentUser: () => Promise<void>
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
-  register: (email: string, password: string, name: string) => Promise<void>
+  register: (email: string, password: string, name: string) => Promise<{ message?: string }>
   updateProfile: (fullName: string, avatarUrl?: string) => Promise<void>
 }
 
@@ -78,9 +78,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   register: async (email: string, password: string, name: string) => {
     set({ isLoading: true })
     try {
-      await api.auth.register(email, password, name)
-      const result = await api.auth.login(email, password)
-      set({ user: result.user, isAuthenticated: true, isLoading: false })
+      const res = await api.auth.register(email, password, name)
+      set({ isLoading: false })
+      return { message: res.message || 'Đăng ký thành công.' }
     } catch (error) {
       set({ isLoading: false })
       throw error

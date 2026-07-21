@@ -6,6 +6,9 @@ import { useAuthStore } from '@/stores/auth-store'
 
 // Auth Pages
 const LoginPage = React.lazy(() => import('@/pages/auth/login').then(m => ({ default: m.LoginPage })))
+const ForgotPasswordPage = React.lazy(() => import('@/pages/auth/forgot-password').then(m => ({ default: m.ForgotPasswordPage })))
+const ResetPasswordPage = React.lazy(() => import('@/pages/auth/reset-password').then(m => ({ default: m.ResetPasswordPage })))
+const VerifyEmailPage = React.lazy(() => import('@/pages/auth/verify-email').then(m => ({ default: m.VerifyEmailPage })))
 
 // Dashboard Pages
 const DashboardPage = React.lazy(() => import('@/pages/dashboard').then(m => ({ default: m.DashboardPage })))
@@ -37,6 +40,9 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<React.Suspense fallback={<FullPageLoader />}><ForgotPasswordPage /></React.Suspense>} />
+      <Route path="/reset-password" element={<React.Suspense fallback={<FullPageLoader />}><ResetPasswordPage /></React.Suspense>} />
+      <Route path="/verify-email" element={<React.Suspense fallback={<FullPageLoader />}><VerifyEmailPage /></React.Suspense>} />
       <Route path="/apply/:token" element={<React.Suspense fallback={<FullPageLoader />}><PublicApplicationFormPage /></React.Suspense>} />
       <Route path="/interview/:token" element={<React.Suspense fallback={<FullPageLoader />}><PublicInterviewWorkspacePage /></React.Suspense>} />
       

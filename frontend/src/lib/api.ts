@@ -89,6 +89,24 @@ export const api = {
         body: JSON.stringify({ currentPassword, newPassword }),
       })
     },
+    forgotPassword(email: string) {
+      return request('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      })
+    },
+    resetPassword(token: string, newPassword: string) {
+      return request('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ token, newPassword }),
+      })
+    },
+    verifyEmail(token: string) {
+      return request('/auth/verify-email', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      })
+    },
   },
   campaigns: {
     jobPositions: () => request<JobPosition[]>('/campaigns/job-positions'),

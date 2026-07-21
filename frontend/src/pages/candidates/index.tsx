@@ -130,6 +130,12 @@ export function CandidatesPage() {
     file: null as File | null,
   })
   const [sortBy, setSortBy] = useState<'score_desc' | 'score_asc' | 'name_asc' | 'date_desc'>('score_desc')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 20
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchMode, searchResults, criteriaForm, sortBy])
 
   useEffect(() => {
     loadCandidates().catch((err) => setError(err instanceof Error ? err.message : 'Could not load candidates'))
@@ -763,12 +769,16 @@ export function CandidatesPage() {
             </p>
           </div>
         ) : (
-          displayedCandidates.map((candidate) => {
-            // candidate.score is already 0-100 (backend divides overallScore/100)
-            const scoreVal = candidate.score ?? 0
-            const scoreColor = scoreVal >= 80 ? 'bg-green-500' : scoreVal >= 60 ? 'bg-blue-500' : 'bg-yellow-500'
+          (() => {
+            const paginatedCandidates = displayedCandidates.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
             return (
-              <div key={candidate.id} className="glass-panel rounded-2xl border-gray-100 dark:border-gray-800 hover:border-blue-200 dark:hover:border-blue-500/50 hover:shadow-md transition-all">
+              <>
+                {paginatedCandidates.map((candidate) => {
+                  // candidate.score is already 0-100 (backend divides overallScore/100)
+                  const scoreVal = candidate.score ?? 0
+                  const scoreColor = scoreVal >= 80 ? 'bg-green-500' : scoreVal >= 60 ? 'bg-blue-500' : 'bg-yellow-500'
+                  return (
+                    <div key={candidate.id} className="glass-panel rounded-2xl border-gray-100 dark:border-gray-800 hover:border-blue-200 dark:hover:border-blue-500/50 hover:shadow-md transition-all">
                 <div className="flex items-center gap-4 px-5 py-4">
                   {/* Avatar */}
                   <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 shadow-sm">
@@ -874,7 +884,59 @@ export function CandidatesPage() {
               </div>
             )
           })
-        )}
+          }
+          {displayedCandidates.length > itemsPerPage && (
+            <div className="flex items-center justify-between mt-6 px-2">
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                Hiển thị {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, displayedCandidates.length)} trên tổng số {displayedCandidates.length}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="rounded-xl border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-slate-800 h-9 px-4"
+                >
+                  Trước
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.ceil(displayedCandidates.length / itemsPerPage) }, (_, i) => i + 1)
+                    .filter(p => p === 1 || p === Math.ceil(displayedCandidates.length / itemsPerPage) || Math.abs(p - currentPage) <= 1)
+                    .map((p, i, arr) => {
+                      if (i > 0 && arr[i] - arr[i - 1] > 1) {
+                        return <span key={`ellipsis-${p}`} className="px-2 text-gray-400">...</span>
+                      }
+                      return (
+                        <button
+                          key={p}
+                          onClick={() => setCurrentPage(p)}
+                          className={`w-9 h-9 rounded-xl text-sm font-medium transition-all flex items-center justify-center ${
+                            currentPage === p 
+                              ? 'bg-blue-600 text-white shadow-sm' 
+                              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      )
+                    })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(displayedCandidates.length / itemsPerPage), p + 1))}
+                  disabled={currentPage === Math.ceil(displayedCandidates.length / itemsPerPage)}
+                  className="rounded-xl border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-slate-800 h-9 px-4"
+                >
+                  Sau
+                </Button>
+              </div>
+            </div>
+          )}
+          </>
+          )
+        })()}
       </div>
 
       <Modal

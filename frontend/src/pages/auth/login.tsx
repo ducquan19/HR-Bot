@@ -193,12 +193,13 @@ function LoginModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void 
   const { login, register, isLoading } = useAuthStore()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('admin@hrbot.com')
-  const [password, setPassword] = useState('password')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
 
   const getPasswordStrength = (pass: string) => {
     let score = 0
@@ -215,9 +216,11 @@ function LoginModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setSuccessMessage('')
     try {
       if (mode === 'login') {
         await login(email, password)
+        navigate('/dashboard')
       } else {
         if (password !== confirmPassword) {
           setError('Mật khẩu xác nhận không khớp')
@@ -227,24 +230,29 @@ function LoginModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void 
           setError('Mật khẩu chưa đủ mạnh. Yêu cầu ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường và số/ký tự đặc biệt.')
           return
         }
-        await register(email, password, name)
+        const res = await register(email, password, name)
+        setSuccessMessage(res.message || 'Đăng ký thành công.')
+        setMode('login')
+        setPassword('')
+        setConfirmPassword('')
       }
-      navigate('/dashboard')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Có lỗi xảy ra')
+    } catch (err: any) {
+      if (err.message === 'EMAIL_NOT_VERIFIED') {
+        setError('Tài khoản chưa được xác thực email. Vui lòng kiểm tra hộp thư của bạn.')
+      } else {
+        setError(err.message || 'Có lỗi xảy ra')
+      }
     }
   }
 
   const toggleMode = () => {
     setMode(mode === 'login' ? 'register' : 'login')
     setError('')
+    setSuccessMessage('')
     if (mode === 'login') {
       setEmail('')
       setPassword('')
       setConfirmPassword('')
-    } else {
-      setEmail('admin@hrbot.com')
-      setPassword('password')
     }
   }
 
@@ -264,17 +272,22 @@ function LoginModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void 
             {mode === 'login' ? 'Chào mừng trở lại!' : 'Tạo tài khoản mới'}
           </h2>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">
-            {mode === 'login' ? 'Đăng nhập để tiếp tục quản lý tuyển dụng.' : 'Đăng ký tài khoản Recruiter để bắt đầu.'}
+            {mode === 'login' ? 'Chào mừng bạn trở lại! Vui lòng đăng nhập vào tài khoản của bạn.' : 'Tạo một tài khoản mới để bắt đầu sử dụng HR Bot.'}
           </p>
         </div>
 
-        {error && (
-          <div className="mb-6 flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm rounded-xl p-3 font-medium">
-            <span className="text-red-500">⚠</span> {error}
-          </div>
-        )}
-
         <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/50 text-red-600 dark:text-red-400 text-sm font-medium">
+              {error}
+            </div>
+          )}
+          {successMessage && (
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/50 text-emerald-600 dark:text-emerald-400 text-sm font-medium">
+              {successMessage}
+            </div>
+          )}
+
           {mode === 'register' && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Họ và tên</label>
@@ -389,9 +402,10 @@ function LoginModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void 
           )}
 
           {mode === 'login' && (
-            <div className="bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-xl p-3 text-xs text-blue-700 dark:text-blue-300 flex items-center gap-2 font-medium mt-6">
-              <CheckCircle2 className="w-4 h-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
-              <span>Demo: admin@hrbot.com / password</span>
+            <div className="mt-2 text-right">
+              <a href="/forgot-password" className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline">
+                Quên mật khẩu?
+              </a>
             </div>
           )}
 

@@ -29,18 +29,35 @@ export class AuthService {
         fullName: dto.name,
         role: UserRole.RECRUITER,
         isActive: true,
+        isEmailVerified: false,
       },
       select: { id: true, email: true, fullName: true, role: true, avatarUrl: true, createdAt: true },
     });
-    return { user: this.toFrontendUser(user) };
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = await bcrypt.hash(token, 10);
+    await this.prisma.emailVerificationToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+      },
+    });
+    await this.mail.sendVerificationEmail(user.email, token);
+
+    return { user: this.toFrontendUser(user), message: 'Please check your email to verify your account.' };
   }
 
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() } });
-    if (!user?.passwordHash || !user.isActive) throw new UnauthorizedException('Email or password is incorrect');
+    if (!user?.passwordHash || !user.isActive) throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
 
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException('Email or password is incorrect');
+    if (!ok) throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
+
+    if (!user.isEmailVerified) {
+      throw new UnauthorizedException('Email chưa được xác thực');
+    }
 
     const tokens = await this.issueTokens(user.id, user.email, user.role);
     return { user: this.toFrontendUser(user), ...tokens };
@@ -53,7 +70,7 @@ export class AuthService {
 
   async forgotPassword(dto: ForgotPasswordDto) {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() } });
-    if (!user) return { message: 'If the email exists, reset instructions have been sent.' };
+    if (!user) return { message: 'Nếu email tồn tại, hướng dẫn đặt lại mật khẩu đã được gửi.' };
 
     const token = crypto.randomBytes(32).toString('hex');
     const tokenHash = await bcrypt.hash(token, 10);
@@ -65,7 +82,7 @@ export class AuthService {
       },
     });
     await this.mail.sendPasswordReset(user.email, token);
-    return { message: 'If the email exists, reset instructions have been sent.' };
+    return { message: 'Nếu email tồn tại, hướng dẫn đặt lại mật khẩu đã được gửi.' };
   }
 
   async resetPassword(dto: ResetPasswordDto) {
@@ -75,7 +92,7 @@ export class AuthService {
       orderBy: { createdAt: 'desc' },
     });
     const match = await this.findMatchingToken(tokens, dto.token);
-    if (!match) throw new BadRequestException('Invalid or expired reset token');
+    if (!match) throw new BadRequestException('Token đặt lại mật khẩu không hợp lệ hoặc đã hết hạn');
 
     const passwordHash = await bcrypt.hash(dto.newPassword, 12);
     await this.prisma.$transaction([
@@ -83,26 +100,61 @@ export class AuthService {
       this.prisma.passwordResetToken.update({ where: { id: match.id }, data: { usedAt: new Date() } }),
       this.prisma.refreshToken.updateMany({ where: { userId: match.userId, revokedAt: null }, data: { revokedAt: new Date() } }),
     ]);
-    return { message: 'Password has been reset' };
+    return { message: 'Mật khẩu đã được đặt lại thành công' };
   }
 
   async changePassword(userId: string, dto: ChangePasswordDto) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    if (!user.passwordHash) throw new BadRequestException('This account does not have a password');
+    if (!user.passwordHash) throw new BadRequestException('Tài khoản này không có mật khẩu');
     const ok = await bcrypt.compare(dto.currentPassword, user.passwordHash);
-    if (!ok) throw new UnauthorizedException('Current password is incorrect');
+    if (!ok) throw new UnauthorizedException('Mật khẩu hiện tại không đúng');
     const same = await bcrypt.compare(dto.newPassword, user.passwordHash);
-    if (same) throw new BadRequestException('New password must be different from old password');
+    if (same) throw new BadRequestException('Mật khẩu mới phải khác mật khẩu cũ');
 
     await this.prisma.$transaction([
       this.prisma.user.update({ where: { id: userId }, data: { passwordHash: await bcrypt.hash(dto.newPassword, 12) } }),
       this.prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } }),
     ]);
-    return { message: 'Password changed successfully' };
+    return { message: 'Đổi mật khẩu thành công' };
   }
 
-  private async issueTokens(id: string, email: string, role: UserRole) {
-    const payload = { sub: id, email, role };
+  async verifyEmail(token: string) {
+    const tokens = await this.prisma.emailVerificationToken.findMany({
+      where: { usedAt: null, expiresAt: { gt: new Date() } },
+      include: { user: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const match = await this.findMatchingToken(tokens, token);
+    if (!match) throw new BadRequestException('Token xác thực không hợp lệ hoặc đã hết hạn');
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: match.userId }, data: { isEmailVerified: true } }),
+      this.prisma.emailVerificationToken.update({ where: { id: match.id }, data: { usedAt: new Date() } }),
+    ]);
+
+    return { message: 'Email đã được xác thực thành công' };
+  }
+
+  async resendVerificationEmail(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (!user || user.isEmailVerified) return { message: 'Nếu email tồn tại và chưa được xác thực, một đường dẫn đã được gửi.' };
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = await bcrypt.hash(token, 10);
+    await this.prisma.emailVerificationToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+    await this.mail.sendVerificationEmail(user.email, token);
+    return { message: 'Nếu email tồn tại và chưa được xác thực, một đường dẫn đã được gửi.' };
+  }
+
+  private async issueTokens(userId: string, email: string, role: UserRole) {
+    const payload = { sub: userId, email, role };
     const accessToken = await this.jwt.signAsync(payload, {
       secret: this.config.get<string>('jwt.accessSecret'),
       expiresIn: this.config.get<string>('jwt.accessTtl'),
@@ -113,7 +165,7 @@ export class AuthService {
     });
     await this.prisma.refreshToken.create({
       data: {
-        userId: id,
+        userId: userId,
         tokenHash: await bcrypt.hash(refreshToken, 10),
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
