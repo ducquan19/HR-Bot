@@ -71,7 +71,7 @@ export const api = {
       return result
     },
     register(email: string, password: string, name: string) {
-      return request<{ user: User }>('/auth/register', {
+      return request<{ user: User; message?: string }>('/auth/register', {
         method: 'POST',
         body: JSON.stringify({ email, password, name }),
       })

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTheme } from '@/contexts/theme-context'
-import { Mail, Lock, Eye, EyeOff, Brain, CheckCircle2, Zap, Shield, Clock, Sun, Moon } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, Brain, Zap, Shield, Clock, Sun, Moon } from 'lucide-react'
 
 // ─── Animated AI CV Widget ────────────────────────────────────────────────────
 function AiCvWidget() {

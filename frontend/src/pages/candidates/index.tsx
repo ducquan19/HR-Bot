@@ -935,9 +935,8 @@ export function CandidatesPage() {
             </div>
           )}
           </>
-            )
-          })()
-        )}
+          )
+        })())}
       </div>
 
       <Modal
