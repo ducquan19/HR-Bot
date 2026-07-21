@@ -150,10 +150,10 @@ async function main() {
 
     const { firstName, lastName } = randomName(i);
 
-    const overallScore = weightedRandomScore();
-    const skillScore = Math.min(10000, Math.max(0, overallScore + Math.floor((Math.random() - 0.5) * 2000)));
-    const experienceScore = Math.min(10000, Math.max(0, overallScore + Math.floor((Math.random() - 0.5) * 2500)));
-    const educationScore = Math.min(10000, Math.max(0, overallScore + Math.floor((Math.random() - 0.5) * 1500)));
+    const overallScore = Math.round(weightedRandomScore() / 100);
+    const skillScore = Math.min(100, Math.max(0, overallScore + Math.floor((Math.random() - 0.5) * 20)));
+    const experienceScore = Math.min(100, Math.max(0, overallScore + Math.floor((Math.random() - 0.5) * 25)));
+    const educationScore = Math.min(100, Math.max(0, overallScore + Math.floor((Math.random() - 0.5) * 15)));
 
     const profile = await prisma.candidateProfile.create({
       data: {
